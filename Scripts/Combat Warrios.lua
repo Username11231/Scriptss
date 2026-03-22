@@ -1,3 +1,5 @@
+local SCRIPT_VERSION_BUILD = 'v6'
+
 ------------ > INITING LOADSTRINGS <--------------------------------------------------------------
 
 local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/ScripterNumber/SPVKHUB/refs/heads/main/Fluent"))()
@@ -13,6 +15,7 @@ local ReplicatedStorage = game:GetService('ReplicatedStorage')
 local ReplicatedFirst = game:GetService('ReplicatedFirst')
 local Lighting = game:GetService('Lighting')
 local CoreGui = game:GetService('CoreGui')
+local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -25,10 +28,6 @@ if getgenv().CharacterAddedConnection ~= nil then
     getgenv().CharacterAddedConnection = nil
 end
 
----------------- PRE FUNCTIONS INITING ----------------------
-
-
--- REACH --
 local function EnableReach(Tool, Reach)
     for i, v in next, Tool:FindFirstChild('Hitboxes'):FindFirstChild('Hitbox'):GetChildren() do
         if v:IsA('Attachment') and v.Name == 'DmgPoint' and not v:GetAttribute('OrigCFrame') then
@@ -48,39 +47,28 @@ local function DisableReach(Tool)
         end
     end
 end
--------
-
--------------------------------------------------------------
 
 getgenv().CharacterAddedConnection = LocalPlayer.CharacterAdded:Connect(function(CharacterAddedConnectionChar)
     Character = CharacterAddedConnectionChar
     Humanoid = CharacterAddedConnectionChar:WaitForChild('Humanoid')
     HumanoidRootPart = CharacterAddedConnectionChar:WaitForChild('HumanoidRootPart')
 
-    ------------------------------ REACH ---------------------------------
-
     if getgenv().ReachConnection ~= nil then
+        getgenv().ReachConnection:Disconnect()
+        getgenv().ReachConnection = nil
 
-    getgenv().ReachConnection:Disconnect()
-    getgenv().ReachConnection = nil
-
-    for i,Child in next, Character:GetChildren() do
-        if Child:IsA('Tool') and Child:GetAttribute('ItemType') and Child:GetAttribute('ItemType') == 'weapon' then
-            EnableReach(Child, ReachDistance)
+        for i,Child in next, Character:GetChildren() do
+            if Child:IsA('Tool') and Child:GetAttribute('ItemType') and Child:GetAttribute('ItemType') == 'weapon' then
+                EnableReach(Child, ReachDistance)
+            end
         end
+
+        getgenv().ReachConnection = Character.ChildAdded:Connect(function(Child)
+            if Child:IsA('Tool') and Child:GetAttribute('ItemType') and Child:GetAttribute('ItemType') == 'weapon' then
+                EnableReach(Child, ReachDistance)
+            end
+        end)
     end
-
-    getgenv().ReachConnection = Character.ChildAdded:Connect(function(Child)
-        if Child:IsA('Tool') and Child:GetAttribute('ItemType') and Child:GetAttribute('ItemType') == 'weapon' then
-            EnableReach(Child, ReachDistance)
-        end
-    end)
-
-    end
-
-    ------------------------------  ---------------------------------
-
-    
 end)
 
 local Network = require(game.ReplicatedStorage.Shared.Vendor.Network)
@@ -98,6 +86,7 @@ local DebugEnabled = false
 
 local ParryMethod = "keypress"
 local ParryEventName = "Parry"
+local DetectMethod = "Sounds (Default)"
 
 local AliveCheckEnabled = true
 local WeaponRequiredEnabled = true
@@ -124,8 +113,6 @@ local function MarkParryUsed()
 end
 
 ------------ > VALIDATION CHECKS <--------------------------------------------------------------
-
-
 
 local function IsAlive()
     if not AliveCheckEnabled then return true end
@@ -333,6 +320,251 @@ function GetEffectiveParryDistance(hitboxPart)
     end
 
     return base + DynamicBonusDistance
+end
+
+------------ > SOUNDS 2 (ANIMATION MARKERS) <--------------------------------------------------------------
+
+local S2_AnimCache = {}
+local S2_ActiveTrackers = {}
+local S2_AnimConns = {}
+local S2_CurrentTarget = nil
+local S2_CurrentTrackerId = nil
+
+local function S2_GetMarkerTimes(animId)
+    if S2_AnimCache[animId] then
+        return S2_AnimCache[animId]
+    end
+
+    local result = {startTime = nil, stopTime = nil}
+    local ok, kfSeq = pcall(function()
+        return KeyframeSequenceProvider:GetKeyframeSequenceAsync(animId)
+    end)
+
+    if not ok or not kfSeq then
+        S2_AnimCache[animId] = result
+        return result
+    end
+
+    for _, keyframe in ipairs(kfSeq:GetKeyframes()) do
+        for _, marker in ipairs(keyframe:GetMarkers()) do
+            if marker.Name == "startHitDetection" then
+                result.startTime = keyframe.Time
+            elseif marker.Name == "stopHitDetection" then
+                result.stopTime = keyframe.Time
+            end
+        end
+    end
+
+    kfSeq:Destroy()
+    S2_AnimCache[animId] = result
+    return result
+end
+
+local function S2_KillTracker(trackerId)
+    local tracker = S2_ActiveTrackers[trackerId]
+    if tracker then
+        if tracker.conn then tracker.conn:Disconnect() end
+        tracker.dead = true
+        S2_ActiveTrackers[trackerId] = nil
+    end
+    if S2_CurrentTrackerId == trackerId then
+        S2_CurrentTarget = nil
+        S2_CurrentTrackerId = nil
+    end
+end
+
+local function S2_KillAllTrackers()
+    for id, _ in pairs(S2_ActiveTrackers) do
+        S2_KillTracker(id)
+    end
+    S2_ActiveTrackers = {}
+    S2_CurrentTarget = nil
+    S2_CurrentTrackerId = nil
+end
+
+local function S2_GetEnemyHitbox(enemyChar)
+    for _, child in ipairs(enemyChar:GetChildren()) do
+        if child:IsA("Tool") then
+            local hitboxes = child:FindFirstChild("Hitboxes")
+            if hitboxes then
+                local hb = hitboxes:FindFirstChild("Hitbox")
+                if hb and hb:IsA("BasePart") then return hb end
+            end
+            local hb = child:FindFirstChild("Hitbox")
+            if hb and hb:IsA("BasePart") then return hb end
+        end
+    end
+    return nil
+end
+
+local function S2_StartTracker(enemyChar, animTrack, markers)
+    local trackerId = tostring(enemyChar) .. "_" .. tostring(tick()) .. "_" .. tostring(math.random(100000, 999999))
+    local parried = false
+
+    local tracker = {
+        enemyChar = enemyChar,
+        parried = false,
+        dead = false,
+        conn = nil
+    }
+    S2_ActiveTrackers[trackerId] = tracker
+
+    local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHrp then
+        S2_ActiveTrackers[trackerId] = nil
+        return
+    end
+
+    local enemyHrp = enemyChar:FindFirstChild("HumanoidRootPart")
+    if not enemyHrp then
+        S2_ActiveTrackers[trackerId] = nil
+        return
+    end
+
+    local currentDist = (myHrp.Position - enemyHrp.Position).Magnitude
+
+    if S2_CurrentTarget and S2_CurrentTrackerId then
+        local oldTracker = S2_ActiveTrackers[S2_CurrentTrackerId]
+        if oldTracker and not oldTracker.dead then
+            local oldEnemy = oldTracker.enemyChar
+            local oldHrp = oldEnemy and oldEnemy:FindFirstChild("HumanoidRootPart")
+            if oldHrp then
+                local oldDist = (myHrp.Position - oldHrp.Position).Magnitude
+                if currentDist < oldDist then
+                    S2_KillTracker(S2_CurrentTrackerId)
+                else
+                    S2_ActiveTrackers[trackerId] = nil
+                    return
+                end
+            else
+                S2_KillTracker(S2_CurrentTrackerId)
+            end
+        end
+    end
+
+    S2_CurrentTarget = enemyChar
+    S2_CurrentTrackerId = trackerId
+
+    tracker.conn = RunService.Heartbeat:Connect(function()
+        if tracker.dead or parried then
+            S2_KillTracker(trackerId)
+            return
+        end
+
+        if not AutoParryToggleValue or DetectMethod ~= "Sounds 2 (Animation Markers)" then
+            S2_KillTracker(trackerId)
+            return
+        end
+
+        if not animTrack.IsPlaying then
+            S2_KillTracker(trackerId)
+            return
+        end
+
+        local elapsed = animTrack.TimePosition
+        if markers.stopTime and elapsed >= markers.stopTime then
+            S2_KillTracker(trackerId)
+            return
+        end
+
+        local lhrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not lhrp then return end
+
+        local eHrp = enemyChar:FindFirstChild("HumanoidRootPart")
+        if not eHrp then
+            S2_KillTracker(trackerId)
+            return
+        end
+
+        local hitboxPart = S2_GetEnemyHitbox(enemyChar)
+        local checkPos = hitboxPart and hitboxPart.Position or eHrp.Position
+        local dist = (checkPos - lhrp.Position).Magnitude
+
+        if not CanParryNow(checkPos) then return end
+
+        local effectiveDist = GetEffectiveParryDistance(hitboxPart)
+
+        if dist <= effectiveDist then
+            parried = true
+            DoParryAction()
+            S2_KillTracker(trackerId)
+        end
+    end)
+end
+
+local function S2_HookEnemy(enemyChar)
+    local humanoid = enemyChar:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return end
+
+    local connKey = tostring(enemyChar)
+    if S2_AnimConns[connKey] then return end
+
+    S2_AnimConns[connKey] = animator.AnimationPlayed:Connect(function(animTrack)
+        if not AutoParryToggleValue or DetectMethod ~= "Sounds 2 (Animation Markers)" then return end
+
+        local anim = animTrack.Animation
+        if not anim or not anim.AnimationId or anim.AnimationId == "" then return end
+
+        task.spawn(function()
+            local markers = S2_GetMarkerTimes(anim.AnimationId)
+            if not markers.startTime and not markers.stopTime then return end
+
+            S2_StartTracker(enemyChar, animTrack, markers)
+        end)
+    end)
+end
+
+local function S2_UnhookAll()
+    for key, conn in pairs(S2_AnimConns) do
+        if conn then conn:Disconnect() end
+    end
+    S2_AnimConns = {}
+    S2_KillAllTrackers()
+end
+
+local S2_ChildAddedConn = nil
+local S2_ChildRemovedConn = nil
+
+local function S2_Enable()
+    S2_Disable_Safe()
+
+    local playerChars = Workspace:FindFirstChild("PlayerCharacters")
+    if playerChars then
+        for _, ch in ipairs(playerChars:GetChildren()) do
+            if ch ~= LocalPlayer.Character then
+                S2_HookEnemy(ch)
+            end
+        end
+
+        S2_ChildAddedConn = playerChars.ChildAdded:Connect(function(ch)
+            if ch ~= LocalPlayer.Character then
+                task.defer(function()
+                    S2_HookEnemy(ch)
+                end)
+            end
+        end)
+
+        S2_ChildRemovedConn = playerChars.ChildRemoved:Connect(function(ch)
+            local connKey = tostring(ch)
+            if S2_AnimConns[connKey] then
+                S2_AnimConns[connKey]:Disconnect()
+                S2_AnimConns[connKey] = nil
+            end
+            for id, tracker in pairs(S2_ActiveTrackers) do
+                if tracker.enemyChar == ch then
+                    S2_KillTracker(id)
+                end
+            end
+        end)
+    end
+end
+
+function S2_Disable_Safe()
+    S2_UnhookAll()
+    if S2_ChildAddedConn then S2_ChildAddedConn:Disconnect(); S2_ChildAddedConn = nil end
+    if S2_ChildRemovedConn then S2_ChildRemovedConn:Disconnect(); S2_ChildRemovedConn = nil end
 end
 
 ------------ > DEBUG VISUALS <--------------------------------------------------------------
@@ -596,7 +828,7 @@ end
 
 local window = Fluent:CreateWindow({
     Title = 'Aether Hub',
-    SubTitle = "Combat Warriors | v5",
+    SubTitle = "Combat Warriors | "..SCRIPT_VERSION_BUILD,
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -664,48 +896,52 @@ AutoParryToggle:OnChanged(function()
     AutoParryToggleValue = Options.AutoParryToggle.Value
 
     if AutoParryToggleValue == true then
-        if getgenv().sc ~= nil then
-            getgenv().sc:Disconnect()
-            getgenv().sc = nil
-        end
-
-        getgenv().sc = game.DescendantAdded:Connect(function(Child)
-            if (Child:IsA('Sound') and Child:IsDescendantOf(workspace.PlayerCharacters))
-                and (Child.Parent ~= nil and Child.Parent.Name == 'Hitbox')
-                and not Child:IsDescendantOf(game.Players.LocalPlayer.Character) then
-
-                pcall(function()
-                    local hitboxPart = Child.Parent
-                    local hitboxPos = hitboxPart.Position
-                    local myPos = game.Players.LocalPlayer.Character.HumanoidRootPart.Position
-                    local dist = (hitboxPos - myPos).Magnitude
-
-                    if ClosestFirstEnabled then
-                        table.insert(ParryQueue, {
-                            distance = dist,
-                            position = hitboxPos,
-                            hitboxPart = hitboxPart
-                        })
-                        ProcessQueue()
-                        return
-                    end
-
-                    if not CanParryNow(hitboxPos) then return end
-
-                    local effectiveDist = GetEffectiveParryDistance(hitboxPart)
-
-                    if dist <= effectiveDist then
-                        DoParryAction()
-                    end
-                end)
+        if DetectMethod == "Sounds (Default)" then
+            if getgenv().sc ~= nil then
+                getgenv().sc:Disconnect()
+                getgenv().sc = nil
             end
-        end)
 
+            getgenv().sc = game.DescendantAdded:Connect(function(Child)
+                if (Child:IsA('Sound') and Child:IsDescendantOf(workspace.PlayerCharacters))
+                    and (Child.Parent ~= nil and Child.Parent.Name == 'Hitbox')
+                    and not Child:IsDescendantOf(game.Players.LocalPlayer.Character) then
+
+                    pcall(function()
+                        local hitboxPart = Child.Parent
+                        local hitboxPos = hitboxPart.Position
+                        local myPos = game.Players.LocalPlayer.Character.HumanoidRootPart.Position
+                        local dist = (hitboxPos - myPos).Magnitude
+
+                        if ClosestFirstEnabled then
+                            table.insert(ParryQueue, {
+                                distance = dist,
+                                position = hitboxPos,
+                                hitboxPart = hitboxPart
+                            })
+                            ProcessQueue()
+                            return
+                        end
+
+                        if not CanParryNow(hitboxPos) then return end
+
+                        local effectiveDist = GetEffectiveParryDistance(hitboxPart)
+
+                        if dist <= effectiveDist then
+                            DoParryAction()
+                        end
+                    end)
+                end
+            end)
+        elseif DetectMethod == "Sounds 2 (Animation Markers)" then
+            S2_Enable()
+        end
     else
         if getgenv().sc ~= nil then
             getgenv().sc:Disconnect()
             getgenv().sc = nil
         end
+        S2_Disable_Safe()
     end
 end)
 
@@ -779,6 +1015,27 @@ local AntiParryDistInput = Tabs.ParryTab:AddInput("AntiParryDist", {
 })
 
 Tabs.ParryTab:AddParagraph({
+    Title = "Метод детекта",
+    Content = "Sounds (Default) — срабатывает 1 раз при появлении звука.\nSounds 2 (Animation Markers) — отслеживает анимации врагов, парирует моментально при дистанции, останавливается на stopHitDetection."
+})
+
+local DetectMethodDropdown = Tabs.ParryTab:AddDropdown("DetectMethodDropdown", {
+    Title = "Метод детекта",
+    Values = { "Sounds (Default)", "Sounds 2 (Animation Markers)" },
+    Multi = false,
+    Default = "Sounds (Default)",
+})
+
+DetectMethodDropdown:OnChanged(function(Value)
+    DetectMethod = Value
+    if Options.AutoParryToggle.Value then
+        Options.AutoParryToggle:SetValue(false)
+        task.wait(0.1)
+        Options.AutoParryToggle:SetValue(true)
+    end
+end)
+
+Tabs.ParryTab:AddParagraph({
     Title = "Weapon Distance Detect",
     Content = "Расширяет радиус парри до размера хитбокса вражеского оружия (X+Y+Z)."
 })
@@ -824,7 +1081,6 @@ Tabs.ParryTab:AddParagraph({
     Title = "Метод парри",
     Content = "keypress — обычное нажатие F. Network — через игровой модуль Network:FireServer."
 })
-
 
 local ParryMethodDropdown = Tabs.ParryTab:AddDropdown("ParryMethodDropdown", {
     Title = "Метод",
@@ -1027,7 +1283,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-
 ------------ > CONFIG TAB <------------------------------------------------------------
 
 SaveManager:SetLibrary(Fluent)
@@ -1174,11 +1429,9 @@ InfiniteStamina:OnChanged(function()
     InfiniteStaminaValue = Options.InfiniteStamina.Value
     if InfiniteStaminaValue == true then
         StaminaClass.getRealNewStaminaValue = function(self, requestedValue)
-
             if self._maxStamina then
                 return self._maxStamina
             end
-
             return oldGetRealValue(self, requestedValue)
         end
     else
