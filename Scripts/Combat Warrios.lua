@@ -234,7 +234,7 @@ local function DoParryAction()
         end
     end)
 
-    task.wait(0.0001 + math.random() * 0.00015 + (math.random(9, 12) / 7500))
+    task.wait(0.00001 + math.random() * 0.000005 + (math.random(3, 9) / 17500))
 
     if ParryMethod == "Network" then
         pcall(function()
@@ -596,7 +596,7 @@ end
 
 local window = Fluent:CreateWindow({
     Title = 'Aether Hub',
-    SubTitle = "Combat Warriors",
+    SubTitle = "Combat Warriors | v5",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -609,6 +609,7 @@ local window = Fluent:CreateWindow({
 local Tabs = {
     CombatTab = window:AddTab({ Title = "Combat", Icon = "" }),
     ParryTab = window:AddTab({ Title = "Parry", Icon = "" }),
+    MiscTab = window:AddTab({ Title = "Misc", Icon = "" }),
     ChecksTab = window:AddTab({ Title = "Checks", Icon = "" }),
     ConfigTab = window:AddTab({ Title = "Config", Icon = "" }),
     MainTab = window:AddTab({ Title = "Main", Icon = "" }),
@@ -1087,6 +1088,103 @@ local ReachDistanceInput = Tabs.CombatTab:AddInput("ReachDistance", {
         ReachDistance = tonumber(Value) <= 7.5 and tonumber(Value) or 7.5
     end
 })
+
+------------ > MISC TAB <--------------------------------------------------------------
+
+local AirDropAutoLoot = Tabs.MiscTab:AddToggle("AirDropAutoLoot", { Title = "Авто-Лут Аирдропа", Default = false })
+
+local AirdropBusy = false
+
+AirDropAutoLoot:OnChanged(function()
+    AirDropAutoLootValue = Options.AirDropAutoLoot.Value
+    if AirDropAutoLootValue == true then
+        while AirDropAutoLootValue do
+            pcall(function()
+                if AirdropBusy then return end
+
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+
+                local mapFolder = workspace:FindFirstChild("Map")
+                if not mapFolder then return end
+
+                for _, obj in ipairs(mapFolder:GetChildren()) do
+                    if AirdropBusy then break end
+                    if obj.Name == "Airdrop" and obj:IsA("Model") then
+                        local crate = obj:FindFirstChild("Crate")
+                        if not crate then continue end
+                        local base = crate:FindFirstChild("Base")
+                        if not base or not base:IsA("BasePart") then continue end
+                        local prompt = base:FindFirstChild("ProximityPrompt")
+                        if not prompt or not prompt.Enabled then continue end
+
+                        local dist = (hrp.Position - base.Position).Magnitude
+                        if dist > 11 then continue end
+
+                        AirdropBusy = true
+
+                        local holdDuration = prompt.HoldDuration or 0
+                        local holdCompleted = true
+
+                        keypress(0x48)
+                        task.wait(0.05 + math.random() * 0.03)
+
+                        if holdDuration > 0 then
+                            local elapsed = 0
+                            local step = 0.15
+                            while elapsed < holdDuration and AirDropAutoLootValue do
+                                task.wait(step)
+                                elapsed = elapsed + step
+
+                                local hrpCheck = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                                if not hrpCheck then holdCompleted = false break end
+                                if not prompt.Parent or not prompt.Enabled then holdCompleted = false break end
+                                if (hrpCheck.Position - base.Position).Magnitude > 11 then holdCompleted = false break end
+                            end
+                        end
+
+                        if holdCompleted and prompt.Parent and prompt.Enabled then
+                            fireproximityprompt(prompt)
+                        end
+
+                        task.wait(0.05 + math.random() * 0.03)
+                        keyrelease(0x48)
+
+                        AirdropBusy = false
+                    end
+                end
+            end)
+            task.wait(0.5)
+        end
+        AirdropBusy = false
+    end
+end)
+
+Tabs.MiscTab:AddParagraph({
+    Title = "Остальне",
+    Content = ""
+})
+
+local InfiniteStamina = Tabs.MiscTab:AddToggle("InfiniteStamina", { Title = "Бесконечная стамина", Default = false })
+
+local StaminaClass = require(ReplicatedStorage.Shared.Source.Stamina.Stamina)
+local oldGetRealValue = StaminaClass.getRealNewStaminaValue
+
+InfiniteStamina:OnChanged(function()
+    InfiniteStaminaValue = Options.InfiniteStamina.Value
+    if InfiniteStaminaValue == true then
+        StaminaClass.getRealNewStaminaValue = function(self, requestedValue)
+
+            if self._maxStamina then
+                return self._maxStamina
+            end
+
+            return oldGetRealValue(self, requestedValue)
+        end
+    else
+        require(game:GetService("ReplicatedStorage").Shared.Source.Stamina.Stamina).getRealNewStaminaValue = oldGetRealValue
+    end
+end)
 
 ------------ > MAIN TAB <--------------------------------------------------------------
 
