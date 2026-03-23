@@ -1,4 +1,4 @@
-local SCRIPT_VERSION_BUILD = 'v6'
+local SCRIPT_VERSION_BUILD = 'v7'
 
 ------------ > INITING LOADSTRINGS <--------------------------------------------------------------
 
@@ -102,14 +102,39 @@ local GroundCheckEnabled = false
 ------------ > COOLDOWN SYSTEM <--------------------------------------------------------------
 
 local LastParryTick = 0
+local LastParrySucceeded = false
+
+local ParryConstants = nil
+pcall(function()
+    ParryConstants = require(ReplicatedStorage.Shared.Source.Parry.ParryConstants)
+end)
+
+local function GetGameCooldown()
+    if ParryConstants then
+        if LastParrySucceeded and ParryConstants.PARRY_COOLDOWN_IN_SECONDS_AFTER_SUCCESSFUL_PARRY then
+            return ParryConstants.PARRY_COOLDOWN_IN_SECONDS_AFTER_SUCCESSFUL_PARRY
+        elseif ParryConstants.PARRY_COOLDOWN_IN_SECONDS then
+            return ParryConstants.PARRY_COOLDOWN_IN_SECONDS
+        end
+    end
+    return CooldownTime
+end
 
 local function IsCooldownReady()
     if not CooldownEnabled then return true end
-    return (tick() - LastParryTick) >= CooldownTime
+    return (tick() - LastParryTick) >= GetGameCooldown()
+end
+
+local function GetCooldownRemaining()
+    if not CooldownEnabled then return 0 end
+    local remaining = GetGameCooldown() - (tick() - LastParryTick)
+    if remaining < 0 then return 0 end
+    return remaining
 end
 
 local function MarkParryUsed()
     LastParryTick = tick()
+    LastParrySucceeded = true
 end
 
 ------------ > VALIDATION CHECKS <--------------------------------------------------------------
@@ -184,10 +209,9 @@ local function IsOnGround()
     return true
 end
 
-local function CanParryNow(attackerPos)
+local function CanParryNow_NoCooldown(attackerPos)
     if not IsAlive() then return false end
     if not HasWeaponEquipped() then return false end
-    if not IsCooldownReady() then return false end
     if IsStunned() then return false end
     if not IsOnGround() then return false end
     if not IsAttackerInFront(attackerPos) then return false end
@@ -195,10 +219,13 @@ local function CanParryNow(attackerPos)
     return true
 end
 
------------- > QUEUE SYSTEM <--------------------------------------------------------------
+local function CanParryNow(attackerPos)
+    if not CanParryNow_NoCooldown(attackerPos) then return false end
+    if not IsCooldownReady() then return false end
+    return true
+end
 
-local ParryQueue = {}
-local QueueProcessing = false
+------------ > PARRY EXECUTION <--------------------------------------------------------------
 
 local function DoParryAction()
     MarkParryUsed()
@@ -221,7 +248,7 @@ local function DoParryAction()
         end
     end)
 
-    task.wait(0.00001 + math.random() * 0.000005 + (math.random(3, 9) / 17500))
+    task.wait(0.000001 + math.random() * 0.0000005 + (math.random(3, 9) / 27500))
 
     if ParryMethod == "Network" then
         pcall(function()
@@ -233,6 +260,37 @@ local function DoParryAction()
         keyrelease(0x46)
     end
 end
+
+local function DoParryWithCooldownWait(attackerPos, hitboxPart)
+    if not CanParryNow_NoCooldown(attackerPos) then return false end
+
+    if not IsCooldownReady() then
+        local remaining = GetCooldownRemaining()
+        if remaining > 0.5 then return false end
+        local waited = 0
+        while waited < remaining do
+            RunService.Heartbeat:Wait()
+            waited = waited + (1/60)
+            if not CanParryNow_NoCooldown(attackerPos) then return false end
+            if not AutoParryToggleValue then return false end
+        end
+        if not IsCooldownReady() then return false end
+    end
+
+    local effectiveDist = GetEffectiveParryDistance(hitboxPart)
+    local lhrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not lhrp then return false end
+    local dist = (attackerPos - lhrp.Position).Magnitude
+    if dist > effectiveDist then return false end
+
+    DoParryAction()
+    return true
+end
+
+------------ > QUEUE SYSTEM <--------------------------------------------------------------
+
+local ParryQueue = {}
+local QueueProcessing = false
 
 local function ProcessQueue()
     if QueueProcessing then return end
@@ -252,12 +310,7 @@ local function ProcessQueue()
         ParryQueue = {}
         QueueProcessing = false
 
-        if CanParryNow(best.position) then
-            local effectiveDist = GetEffectiveParryDistance(best.hitboxPart)
-            if best.distance <= effectiveDist then
-                DoParryAction()
-            end
-        end
+        DoParryWithCooldownWait(best.position, best.hitboxPart)
     end)
 end
 
@@ -327,8 +380,6 @@ end
 local S2_AnimCache = {}
 local S2_ActiveTrackers = {}
 local S2_AnimConns = {}
-local S2_CurrentTarget = nil
-local S2_CurrentTrackerId = nil
 
 local function S2_GetMarkerTimes(animId)
     if S2_AnimCache[animId] then
@@ -367,34 +418,53 @@ local function S2_KillTracker(trackerId)
         tracker.dead = true
         S2_ActiveTrackers[trackerId] = nil
     end
-    if S2_CurrentTrackerId == trackerId then
-        S2_CurrentTarget = nil
-        S2_CurrentTrackerId = nil
-    end
 end
 
 local function S2_KillAllTrackers()
-    for id, _ in pairs(S2_ActiveTrackers) do
-        S2_KillTracker(id)
+    for id, tracker in pairs(S2_ActiveTrackers) do
+        if tracker.conn then tracker.conn:Disconnect() end
+        tracker.dead = true
     end
     S2_ActiveTrackers = {}
-    S2_CurrentTarget = nil
-    S2_CurrentTrackerId = nil
 end
 
-local function S2_GetEnemyHitbox(enemyChar)
+local function S2_KillTrackersForEnemy(enemyChar)
+    for id, tracker in pairs(S2_ActiveTrackers) do
+        if tracker.enemyChar == enemyChar then
+            S2_KillTracker(id)
+        end
+    end
+end
+
+local function S2_GetEnemyHitboxPos(enemyChar)
     for _, child in ipairs(enemyChar:GetChildren()) do
         if child:IsA("Tool") then
             local hitboxes = child:FindFirstChild("Hitboxes")
             if hitboxes then
                 local hb = hitboxes:FindFirstChild("Hitbox")
-                if hb and hb:IsA("BasePart") then return hb end
+                if hb then
+                    if hb:IsA("BasePart") then
+                        return hb.Position, hb
+                    end
+                    for _, sub in ipairs(hb:GetChildren()) do
+                        if sub:IsA("BasePart") then
+                            return sub.Position, sub
+                        end
+                        if sub:IsA("Attachment") then
+                            return sub.WorldPosition, nil
+                        end
+                    end
+                end
             end
             local hb = child:FindFirstChild("Hitbox")
-            if hb and hb:IsA("BasePart") then return hb end
+            if hb and hb:IsA("BasePart") then
+                return hb.Position, hb
+            end
         end
     end
-    return nil
+    local hrp = enemyChar:FindFirstChild("HumanoidRootPart")
+    if hrp then return hrp.Position, nil end
+    return nil, nil
 end
 
 local function S2_StartTracker(enemyChar, animTrack, markers)
@@ -403,47 +473,10 @@ local function S2_StartTracker(enemyChar, animTrack, markers)
 
     local tracker = {
         enemyChar = enemyChar,
-        parried = false,
         dead = false,
         conn = nil
     }
     S2_ActiveTrackers[trackerId] = tracker
-
-    local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not myHrp then
-        S2_ActiveTrackers[trackerId] = nil
-        return
-    end
-
-    local enemyHrp = enemyChar:FindFirstChild("HumanoidRootPart")
-    if not enemyHrp then
-        S2_ActiveTrackers[trackerId] = nil
-        return
-    end
-
-    local currentDist = (myHrp.Position - enemyHrp.Position).Magnitude
-
-    if S2_CurrentTarget and S2_CurrentTrackerId then
-        local oldTracker = S2_ActiveTrackers[S2_CurrentTrackerId]
-        if oldTracker and not oldTracker.dead then
-            local oldEnemy = oldTracker.enemyChar
-            local oldHrp = oldEnemy and oldEnemy:FindFirstChild("HumanoidRootPart")
-            if oldHrp then
-                local oldDist = (myHrp.Position - oldHrp.Position).Magnitude
-                if currentDist < oldDist then
-                    S2_KillTracker(S2_CurrentTrackerId)
-                else
-                    S2_ActiveTrackers[trackerId] = nil
-                    return
-                end
-            else
-                S2_KillTracker(S2_CurrentTrackerId)
-            end
-        end
-    end
-
-    S2_CurrentTarget = enemyChar
-    S2_CurrentTrackerId = trackerId
 
     tracker.conn = RunService.Heartbeat:Connect(function()
         if tracker.dead or parried then
@@ -470,23 +503,51 @@ local function S2_StartTracker(enemyChar, animTrack, markers)
         local lhrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not lhrp then return end
 
-        local eHrp = enemyChar:FindFirstChild("HumanoidRootPart")
-        if not eHrp then
+        local checkPos, hitboxPart = S2_GetEnemyHitboxPos(enemyChar)
+        if not checkPos then
             S2_KillTracker(trackerId)
             return
         end
 
-        local hitboxPart = S2_GetEnemyHitbox(enemyChar)
-        local checkPos = hitboxPart and hitboxPart.Position or eHrp.Position
         local dist = (checkPos - lhrp.Position).Magnitude
-
-        if not CanParryNow(checkPos) then return end
-
         local effectiveDist = GetEffectiveParryDistance(hitboxPart)
 
-        if dist <= effectiveDist then
+        if dist > effectiveDist then return end
+
+        if not CanParryNow_NoCooldown(checkPos) then return end
+
+        if IsCooldownReady() then
             parried = true
             DoParryAction()
+            S2_KillTracker(trackerId)
+            return
+        end
+
+        local remaining = GetCooldownRemaining()
+        if remaining <= 0.35 then
+            parried = true
+            tracker.dead = true
+            task.spawn(function()
+                local waited = 0
+                while waited < remaining do
+                    RunService.Heartbeat:Wait()
+                    waited = waited + (1/60)
+                    if not AutoParryToggleValue then return end
+                end
+                if not IsCooldownReady() then return end
+
+                local lhrp2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not lhrp2 then return end
+
+                local pos2, hb2 = S2_GetEnemyHitboxPos(enemyChar)
+                if not pos2 then return end
+
+                local dist2 = (pos2 - lhrp2.Position).Magnitude
+                local eff2 = GetEffectiveParryDistance(hb2)
+                if dist2 <= eff2 and CanParryNow(pos2) then
+                    DoParryAction()
+                end
+            end)
             S2_KillTracker(trackerId)
         end
     end)
@@ -552,11 +613,7 @@ local function S2_Enable()
                 S2_AnimConns[connKey]:Disconnect()
                 S2_AnimConns[connKey] = nil
             end
-            for id, tracker in pairs(S2_ActiveTrackers) do
-                if tracker.enemyChar == ch then
-                    S2_KillTracker(id)
-                end
-            end
+            S2_KillTrackersForEnemy(ch)
         end)
     end
 end
@@ -741,7 +798,12 @@ local function UpdateDebugVisuals(parryDist, antiDist, bonusDist, nearDist, near
         if WeaponDistDetectEnabled then
             weapText = string.format(" | WPN: %.1f", weaponRange)
         end
-        DebugLabel.Text = string.format("Parry: %.1f  Anti: %.1f%s%s%s", parryDist, antiDist, dynText, weapText, nearText)
+        local cdText = ""
+        local cdRemain = GetCooldownRemaining()
+        if cdRemain > 0 then
+            cdText = string.format(" | CD: %.2fs", cdRemain)
+        end
+        DebugLabel.Text = string.format("Parry: %.1f  Anti: %.1f%s%s%s%s", parryDist, antiDist, dynText, weapText, nearText, cdText)
     end
 
     if ChecksLabel then
@@ -761,18 +823,22 @@ local function UpdateDebugVisuals(parryDist, antiDist, bonusDist, nearDist, near
 
         local cdLeft = ""
         if CooldownEnabled then
-            local remaining = CooldownTime - (tick() - LastParryTick)
+            local remaining = GetCooldownRemaining()
             if remaining > 0 then
-                cdLeft = string.format("(%.1fs)", remaining)
+                cdLeft = string.format("(%.2fs)", remaining)
             end
         end
 
-        ChecksLabel.Text = string.format("%s | %s | %s%s | %s | %s",
+        local trackCount = 0
+        for _ in pairs(S2_ActiveTrackers) do trackCount = trackCount + 1 end
+
+        ChecksLabel.Text = string.format("%s | %s | %s%s | %s | %s | TRK:%d",
             tag("ALIVE", alive),
             tag("WEAP", weapon),
             tag("CD", cd), cdLeft,
             tag("STUN", not stun),
-            tag("GND", ground)
+            tag("GND", ground),
+            trackCount
         )
     end
 end
@@ -923,13 +989,10 @@ AutoParryToggle:OnChanged(function()
                             return
                         end
 
-                        if not CanParryNow(hitboxPos) then return end
-
                         local effectiveDist = GetEffectiveParryDistance(hitboxPart)
+                        if dist > effectiveDist then return end
 
-                        if dist <= effectiveDist then
-                            DoParryAction()
-                        end
+                        DoParryWithCooldownWait(hitboxPos, hitboxPart)
                     end)
                 end
             end)
@@ -1233,7 +1296,7 @@ CooldownToggle:OnChanged(function()
 end)
 
 local CooldownInput = Tabs.ChecksTab:AddInput("CooldownInput", {
-    Title = "Время кулдауна (сек)",
+    Title = "Время кулдауна (сек, фоллбэк)",
     Default = tostring(CooldownTime),
     Placeholder = "0.65",
     Numeric = true,
@@ -1412,6 +1475,404 @@ AirDropAutoLoot:OnChanged(function()
             task.wait(0.5)
         end
         AirdropBusy = false
+    end
+end)
+
+Tabs.MiscTab:AddParagraph({
+    Title = "Авто-фарм",
+    Content = ""
+})
+
+local LegitAutoFarm = Tabs.MiscTab:AddToggle("LegitAutoFarm", { Title = "Legit AutoFarm", Default = false })
+
+local AutoFarmRunning = false
+local PathfindingService = game:GetService("PathfindingService")
+local AF_ShiftHeld = false
+local AF_LastPos = nil
+local AF_StuckTimer = 0
+local AF_StuckTarget = nil
+
+local function IsInMainMenu()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return true end
+    local roact = pg:FindFirstChild("RoactUI")
+    if not roact then return false end
+    return roact:FindFirstChild("MainMenu") ~= nil
+end
+
+local function TryRespawn()
+    pcall(function()
+        local m = require(ReplicatedStorage.Client.Source.Spawn.SpawnHandlerClient)
+        m.spawnCharacter(true)
+    end)
+end
+
+local function AF_EquipWeapon()
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    for _, v in ipairs(char:GetChildren()) do
+        if v:IsA("Tool") and v:GetAttribute("ItemType") == "weapon" then
+            return
+        end
+    end
+
+    for _, v in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if v:IsA("Tool") and v:GetAttribute("ItemType") == "weapon" then
+            local hasHitbox = v:FindFirstChild("Hitboxes") or v:FindFirstChild("Hitbox")
+            if hasHitbox then
+                v.Parent = char
+                return
+            end
+        end
+    end
+
+    for _, v in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if v:IsA("Tool") and v:GetAttribute("ItemType") == "weapon" then
+            v.Parent = char
+            return
+        end
+    end
+end
+
+local function AF_GetNearestEnemy(excludeChar)
+    local char = LocalPlayer.Character
+    if not char then return nil, 9999 end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil, 9999 end
+
+    local nearestChar = nil
+    local nearestDist = 9999
+
+    local playerChars = Workspace:FindFirstChild("PlayerCharacters")
+    if not playerChars then return nil, 9999 end
+
+    for _, pChar in ipairs(playerChars:GetChildren()) do
+        if pChar ~= char and pChar ~= excludeChar then
+            local eHrp = pChar:FindFirstChild("HumanoidRootPart")
+            local eHum = pChar:FindFirstChild("Humanoid")
+            if eHrp and eHum and eHum.Health > 0 then
+                local dist = (hrp.Position - eHrp.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearestChar = pChar
+                end
+            end
+        end
+    end
+
+    return nearestChar, nearestDist
+end
+
+local function AF_ManageSprint()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local vel = hrp.AssemblyLinearVelocity
+    local flatSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
+
+    if flatSpeed < 26.56 then
+        if not AF_ShiftHeld then
+            keypress(0x10)
+            AF_ShiftHeld = true
+        end
+    end
+end
+
+local function AF_StopAllMovement()
+    pcall(function()
+        keyrelease(0x57)
+        keyrelease(0x53)
+        keyrelease(0x41)
+        keyrelease(0x44)
+        if AF_ShiftHeld then
+            keyrelease(0x10)
+            AF_ShiftHeld = false
+        end
+    end)
+end
+
+local function AF_SimulateMovement(direction)
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+
+    local forward = camera.CFrame.LookVector * Vector3.new(1, 0, 1)
+    if forward.Magnitude < 0.01 then return end
+    forward = forward.Unit
+
+    local right = camera.CFrame.RightVector * Vector3.new(1, 0, 1)
+    if right.Magnitude < 0.01 then return end
+    right = right.Unit
+
+    local dot_f = direction:Dot(forward)
+    local dot_r = direction:Dot(right)
+
+    if dot_f > 0.3 then keypress(0x57) else keyrelease(0x57) end
+    if dot_f < -0.3 then keypress(0x53) else keyrelease(0x53) end
+    if dot_r > 0.3 then keypress(0x44) else keyrelease(0x44) end
+    if dot_r < -0.3 then keypress(0x41) else keyrelease(0x41) end
+
+    AF_ManageSprint()
+end
+
+local function AF_DoAttack()
+    mouse1press()
+    task.wait(0.005 + math.random() * 0.02)
+    mouse1release()
+end
+
+local function AF_WalkToTarget(targetPos)
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    local path = PathfindingService:CreatePath({
+        AgentRadius = 2,
+        AgentHeight = 5,
+        AgentCanJump = true,
+        AgentJumpHeight = 7.2,
+        AgentMaxSlope = 45,
+    })
+
+    local pathSuccess = false
+    pcall(function()
+        path:ComputeAsync(hrp.Position, targetPos)
+        if path.Status == Enum.PathStatus.Success then
+            pathSuccess = true
+        end
+    end)
+
+    if pathSuccess then
+        local waypoints = path:GetWaypoints()
+
+        for i = 2, #waypoints do
+            if not Options.LegitAutoFarm.Value or not AutoFarmRunning then
+                AF_StopAllMovement()
+                return false
+            end
+
+            local char2 = LocalPlayer.Character
+            local hum2 = char2 and char2:FindFirstChild("Humanoid")
+            local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
+            if not char2 or not hum2 or hum2.Health <= 0 or not hrp2 then
+                AF_StopAllMovement()
+                return false
+            end
+
+            local _, curEnemyDist = AF_GetNearestEnemy(nil)
+            if curEnemyDist and curEnemyDist <= 12 then
+                AF_StopAllMovement()
+                return true
+            end
+
+            local wp = waypoints[i]
+            local wpPos = wp.Position
+
+            if wp.Action == Enum.PathWaypointAction.Jump then
+                keypress(0x20)
+                task.wait(0.05)
+                keyrelease(0x20)
+            end
+
+            local timeout = 0
+            while timeout < 3 do
+                if not Options.LegitAutoFarm.Value or not AutoFarmRunning then
+                    AF_StopAllMovement()
+                    return false
+                end
+
+                local hrp3 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not hrp3 then
+                    AF_StopAllMovement()
+                    return false
+                end
+
+                local flatDist = (Vector3.new(hrp3.Position.X, 0, hrp3.Position.Z) - Vector3.new(wpPos.X, 0, wpPos.Z)).Magnitude
+                if flatDist < 3 then break end
+
+                local dir = Vector3.new(wpPos.X, 0, wpPos.Z) - Vector3.new(hrp3.Position.X, 0, hrp3.Position.Z)
+                if dir.Magnitude > 0.01 then
+                    AF_SimulateMovement(dir.Unit)
+                end
+
+                if hrp3.Position.Y < wpPos.Y - 1.5 then
+                    keypress(0x20)
+                    task.wait(0.05)
+                    keyrelease(0x20)
+                end
+
+                AF_EquipWeapon()
+
+                RunService.Heartbeat:Wait()
+                timeout = timeout + (1/60)
+            end
+        end
+
+        AF_StopAllMovement()
+        return true
+    end
+
+    return false
+end
+
+local function AF_IsStuck()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    local curPos = hrp.Position
+
+    if AF_LastPos then
+        local moved = (Vector3.new(curPos.X, 0, curPos.Z) - Vector3.new(AF_LastPos.X, 0, AF_LastPos.Z)).Magnitude
+        if moved < 5 then
+            AF_StuckTimer = AF_StuckTimer + 0.05
+        else
+            AF_StuckTimer = 0
+        end
+    end
+
+    AF_LastPos = curPos
+    return AF_StuckTimer >= 3.5
+end
+
+local function AF_ResetStuck()
+    AF_StuckTimer = 0
+    AF_LastPos = nil
+end
+
+local function AF_DirectWalk(targetPos)
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local dir = Vector3.new(targetPos.X, 0, targetPos.Z) - Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+    if dir.Magnitude > 0.01 then
+        AF_SimulateMovement(dir.Unit)
+    end
+
+    if hrp.Position.Y < targetPos.Y - 1 then
+        keypress(0x20)
+        task.wait(0.05)
+        keyrelease(0x20)
+    end
+end
+
+LegitAutoFarm:OnChanged(function()
+    local val = Options.LegitAutoFarm.Value
+    if val == true and not AutoFarmRunning then
+        AutoFarmRunning = true
+
+        if not AutoParryToggleValue then
+            Options.AutoParryToggle:SetValue(true)
+        end
+
+        task.spawn(function()
+            while Options.LegitAutoFarm.Value and AutoFarmRunning do
+
+                if IsInMainMenu() then
+                    AF_StopAllMovement()
+                    AF_ResetStuck()
+                    TryRespawn()
+                    task.wait(5)
+                    continue
+                end
+
+                local char = LocalPlayer.Character
+                local hum = char and char:FindFirstChild("Humanoid")
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+                if not char or not hum or hum.Health <= 0 or not hrp then
+                    AF_StopAllMovement()
+                    AF_ResetStuck()
+                    task.wait(1)
+                    continue
+                end
+
+                if not AutoParryToggleValue then
+                    Options.AutoParryToggle:SetValue(true)
+                end
+                if not AntiParryToggleValue then
+                    Options.AntiParryToggle:SetValue(true)
+                end
+
+                AF_EquipWeapon()
+
+                if AF_IsStuck() then
+                    AF_StopAllMovement()
+                    AF_ResetStuck()
+                    AF_StuckTarget = AF_StuckTarget or nil
+
+                    local enemyChar, _ = AF_GetNearestEnemy(AF_StuckTarget)
+                    if enemyChar then
+                        AF_StuckTarget = enemyChar
+                    else
+                        AF_StuckTarget = nil
+                    end
+                    task.wait(0.3)
+                    continue
+                end
+
+                local enemyChar, enemyDist
+                if AF_StuckTarget then
+                    local eHrp = AF_StuckTarget:FindFirstChild("HumanoidRootPart")
+                    local eHum = AF_StuckTarget:FindFirstChild("Humanoid")
+                    if eHrp and eHum and eHum.Health > 0 and AF_StuckTarget.Parent then
+                        enemyChar = AF_StuckTarget
+                        local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        enemyDist = myHrp and (myHrp.Position - eHrp.Position).Magnitude or 9999
+                    else
+                        AF_StuckTarget = nil
+                        enemyChar, enemyDist = AF_GetNearestEnemy(nil)
+                    end
+                else
+                    enemyChar, enemyDist = AF_GetNearestEnemy(nil)
+                end
+
+                if not enemyChar then
+                    AF_StopAllMovement()
+                    AF_ResetStuck()
+                    task.wait(0.5)
+                    continue
+                end
+
+                local eHrp = enemyChar:FindFirstChild("HumanoidRootPart")
+                if not eHrp then
+                    AF_StopAllMovement()
+                    task.wait(0.3)
+                    continue
+                end
+
+                if enemyDist <= 10 then
+                    AF_ResetStuck()
+                    AF_StuckTarget = nil
+
+                    local dir = Vector3.new(eHrp.Position.X, 0, eHrp.Position.Z) - Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+                    if dir.Magnitude > 0.01 then
+                        AF_SimulateMovement(dir.Unit)
+                    end
+
+                    AF_DoAttack()
+                    task.wait(0.08 + math.random() * 0.07)
+                    continue
+                end
+
+                local targetPos = eHrp.Position
+                local reached = AF_WalkToTarget(targetPos)
+
+                if not reached then
+                    AF_DirectWalk(targetPos)
+                    task.wait(0.3)
+                    AF_StopAllMovement()
+                end
+
+                task.wait(0.05)
+            end
+
+            AF_StopAllMovement()
+            AF_ResetStuck()
+            AF_StuckTarget = nil
+            AutoFarmRunning = false
+        end)
+    elseif val == false then
+        AutoFarmRunning = false
+        AF_StopAllMovement()
     end
 end)
 
