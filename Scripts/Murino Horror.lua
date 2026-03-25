@@ -1,3 +1,5 @@
+local SCRIPT_VERSION_CHECK = '0.0.2'
+
 ------------ > INITING LOADSTRINGS <-------------------------------------------------------------- 
 
 local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/ScripterNumber/SPVKHUB/refs/heads/main/Fluent"))()
@@ -30,6 +32,7 @@ getgc = RegisterFunction("function", getgc or get_gc_objects)
 
 local IS_ANTI_ZAEC_ENABLED = false
 local IS_ANTI_CHIGUR_ENABLED = false
+local IS_ANTI_AMAMAM_ENABLED = false
 
 local Workspace = game:GetService('Workspace')
 local Players = game:GetService('Players')
@@ -64,8 +67,17 @@ mt.__namecall = function(self, ...)
     local args = {...}
     
     if method == "FireServer" and self.ClassName == 'RemoteEvent' then
-        if self.Name == 'Death' and IS_ANTI_ZAEC_ENABLED == true then
+        if self.Name == 'Death' and IS_ANTI_ZAEC_ENABLED == true and args[1] ~= nil and args[1] == 'Zaec' then
           warn('Aborted: '.. self.Name)
+          return
+        end
+        if self.Name == 'Death' and IS_ANTI_AMAMAM_ENABLED == true and args[1] ~= nil and args[1] == 'amamam' then
+          warn('Aborted: '.. self.Name)
+          if Humanoid ~= nil then
+            Humanoid.WalkSpeed = 20
+            Humanoid.JumpPower = 40
+          end
+          pcall(function() game:GetService("Players").LocalPlayer.PlayerGui.amamam.Enabled = false end)
           return
         end
         if self.Name == 'Chigur' and IS_ANTI_CHIGUR_ENABLED == true then
@@ -83,7 +95,7 @@ end))
 
 local window = Fluent:CreateWindow({
     Title = 'Aether Hub | Мурино Хоррор',
-    SubTitle = "v0.0.1",
+    SubTitle = SCRIPT_VERSION_CHECK,
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -146,6 +158,39 @@ AntiChigurDeathToggle:OnChanged(function()
     else
         IS_ANTI_CHIGUR_ENABLED = false
     end
+end)
+
+local IS_ANTI_AMAMAM_ENABLED = false
+
+local AntiAmamamMonsterDeathToggle = Tabs.MainTab:AddToggle("AntiAmamamMonsterDeathToggle", {
+    Title = "Анти-Амамам Монстр с фруктами", 
+    Default = false
+})
+
+AntiAmamamMonsterDeathToggle:OnChanged(function()
+    IS_ANTI_AMAMAM_ENABLED = Options.AntiAmamamMonsterDeathToggle.Value
+    
+    pcall(function()
+
+        local eventsFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
+        local amamamEvent = eventsFolder and eventsFolder:FindFirstChild("amamam")
+        
+        if amamamEvent and amamamEvent:IsA("RemoteEvent") then
+   
+            if getconnections then
+
+                local connections = getconnections(amamamEvent.OnClientEvent)
+                
+                for _, conn in ipairs(connections) do
+                    if IS_ANTI_AMAMAM_ENABLED then
+                        conn:Disable()
+                    else
+                        conn:Enable()
+                    end
+                end
+            end
+        end
+    end)
 end)
 
 local TestToggle = Tabs.MainTab:AddToggle("TestToggle", {Title = "тест фун", Default = false})
