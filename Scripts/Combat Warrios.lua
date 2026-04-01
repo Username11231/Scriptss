@@ -1,4 +1,4 @@
-local SCRIPT_VERSION_BUILD = 'v12'
+local SCRIPT_VERSION_BUILD = 'v13'
 
 local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/ScripterNumber/SPVKHUB/refs/heads/main/Fluent"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
@@ -1049,6 +1049,7 @@ end
 local function Create3DBox(adornee)
     local box = Instance.new("BoxHandleAdornment")
     box.Adornee = adornee
+    box.Size = Vector3.new(4, 5.5, 1.5)
     box.AlwaysOnTop = true
     box.ZIndex = 5
     box.Transparency = 0.5
@@ -1064,6 +1065,7 @@ local function CleanupESP(player)
         end
         if ESPPlayers[player].Highlight then ESPPlayers[player].Highlight:Destroy() end
         if ESPPlayers[player].Box3D then ESPPlayers[player].Box3D:Destroy() end
+        if ESPPlayers[player].Text then ESPPlayers[player].Text:Destroy() end
         ESPPlayers[player] = nil
     end
 end
@@ -1072,10 +1074,22 @@ local function SetupESP(player)
     if player == LocalPlayer then return end
     CleanupESP(player)
     
+    local text = Instance.new("TextLabel")
+    text.BackgroundTransparency = 1
+    text.Font = Enum.Font.GothamBold
+    text.TextSize = 13
+    text.TextStrokeTransparency = 0
+    text.TextStrokeColor3 = Color3.new(0, 0, 0)
+    text.Visible = false
+    text.AnchorPoint = Vector2.new(0.5, 1)
+    text.Size = UDim2.new(0, 0, 0, 0)
+    text.Parent = ESP2DGui
+
     local objects = {
         Box2D = Create2DBox(),
         Highlight = CreateHighlight(nil),
-        Box3D = Create3DBox(nil)
+        Box3D = Create3DBox(nil),
+        Text = text
     }
     ESPPlayers[player] = objects
 end
@@ -1100,35 +1114,33 @@ RunService.RenderStepped:Connect(function()
         
         local isAlive = char and hrp and hum and hum.Health > 0
         local draw2D = false
+        local drawText = false
         local color = IsFriend(player) and ESPFriendColor or ESPEnemyColor
 
         if ESPEnabled and isAlive then
-            if ESPMethod == "2D Box" then
-                local cam = workspace.CurrentCamera
-                local pos, onScreen = cam:WorldToViewportPoint(hrp.Position)
+            local cam = workspace.CurrentCamera
+            local pos, onScreen = cam:WorldToViewportPoint(hrp.Position)
+            
+            if onScreen then
+                local head = char:FindFirstChild("Head")
+                local headPos = head and head.Position or (hrp.Position + Vector3.new(0, 1.5, 0))
+                local footPos = hrp.Position - Vector3.new(0, 3, 0)
                 
-                if onScreen then
-                    local head = char:FindFirstChild("Head")
-                    local headPos = head and head.Position or (hrp.Position + Vector3.new(0, 2, 0))
-                    local footPos = hrp.Position - Vector3.new(0, 3, 0)
-                    
-                    local topPos = cam:WorldToViewportPoint(headPos + Vector3.new(0, 0.5, 0))
-                    local bottomPos = cam:WorldToViewportPoint(footPos)
-                    
-                    local height = math.abs(topPos.Y - bottomPos.Y)
-                    local width = height / 2
-                    local x = pos.X - width / 2
-                    local y = topPos.Y
+                local topPos = cam:WorldToViewportPoint(headPos + Vector3.new(0, 0.5, 0))
+                local bottomPos = cam:WorldToViewportPoint(footPos)
+                
+                local height = math.abs(topPos.Y - bottomPos.Y)
+                local width = height / 2
+                local x = pos.X - width / 2
+                local y = topPos.Y
 
+                if ESPMethod == "2D Box" then
                     objs.Box2D.Top.Position = UDim2.new(0, x, 0, y)
                     objs.Box2D.Top.Size = UDim2.new(0, width, 0, 1)
-                    
                     objs.Box2D.Bottom.Position = UDim2.new(0, x, 0, y + height)
                     objs.Box2D.Bottom.Size = UDim2.new(0, width, 0, 1)
-                    
                     objs.Box2D.Left.Position = UDim2.new(0, x, 0, y)
                     objs.Box2D.Left.Size = UDim2.new(0, 1, 0, height)
-                    
                     objs.Box2D.Right.Position = UDim2.new(0, x + width, 0, y)
                     objs.Box2D.Right.Size = UDim2.new(0, 1, 0, height)
 
@@ -1137,14 +1149,20 @@ RunService.RenderStepped:Connect(function()
                     end
                     draw2D = true
                 end
-            elseif ESPMethod == "Highlight" then
+
+                objs.Text.Text = string.format("%s [%d HP]", player.DisplayName, math.floor(hum.Health))
+                objs.Text.TextColor3 = color
+                objs.Text.Position = UDim2.new(0, pos.X, 0, topPos.Y - 2)
+                drawText = true
+            end
+
+            if ESPMethod == "Highlight" then
                 objs.Highlight.Adornee = char
                 objs.Highlight.FillColor = color
                 objs.Highlight.OutlineColor = color
                 objs.Highlight.Enabled = true
             elseif ESPMethod == "3D Box" then
                 objs.Box3D.Adornee = hrp
-                objs.Box3D.Size = char:GetExtentsSize()
                 objs.Box3D.Color3 = color
                 objs.Box3D.Visible = true
             end
@@ -1153,6 +1171,8 @@ RunService.RenderStepped:Connect(function()
         for _, line in pairs(objs.Box2D) do
             line.Visible = draw2D
         end
+        objs.Text.Visible = drawText
+
         if not ESPEnabled or ESPMethod ~= "Highlight" or not isAlive then
             objs.Highlight.Enabled = false
         end
