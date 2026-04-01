@@ -1,4 +1,4 @@
-local SCRIPT_VERSION_BUILD = 'v11'
+local SCRIPT_VERSION_BUILD = 'v12'
 
 local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/ScripterNumber/SPVKHUB/refs/heads/main/Fluent"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
@@ -68,6 +68,52 @@ getgenv().CharacterAddedConnection = LocalPlayer.CharacterAdded:Connect(function
 end)
 
 local Network = require(game.ReplicatedStorage.Shared.Vendor.Network)
+
+getgenv().AetherFriends = getgenv().AetherFriends or {}
+
+local function IsFriend(charOrPlayer)
+    if typeof(charOrPlayer) ~= "Instance" then return false end
+    local p
+    if charOrPlayer:IsA("Player") then
+        p = charOrPlayer
+    else
+        p = Players:GetPlayerFromCharacter(charOrPlayer)
+        if not p then
+            local playerChars = Workspace:FindFirstChild("PlayerCharacters")
+            if playerChars and charOrPlayer.Parent == playerChars then
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr.Character == charOrPlayer then
+                        p = plr
+                        break
+                    end
+                end
+            end
+        end
+    end
+    return p and getgenv().AetherFriends[p.UserId] ~= nil or false
+end
+
+local function FindPlayersByPartialName(query)
+    if not query or query == "" then return {} end
+    query = query:lower()
+    local results = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if p.Name:lower():find(query, 1, true) or p.DisplayName:lower():find(query, 1, true) then
+                table.insert(results, p)
+            end
+        end
+    end
+    return results
+end
+
+local FriendSearchQuery = ""
+
+local AimEnabled = false
+local AimPredictEnabled = false
+local AimPredictValue = 0.3
+local AimMaxDistance = 100
+local AimConnection = nil
 
 local AutoParryDistance = 12
 local AntiParryDistance = 16
@@ -362,8 +408,6 @@ function GetEffectiveParryDistance(hitboxPart)
     return base + DynamicBonusDistance
 end
 
------------------ ANIMATION CACHING SYSTEM (FIX FOR SOUNDS 2) -----------------
-
 local SlashAnimIdsCache = {}
 local ParryAnimIdsCache = {}
 local HasCachedAnims = false
@@ -399,9 +443,7 @@ local function CacheAllAnimations()
         end
     end
 end
-task.spawn(CacheAllAnimations) -- Вызываем сразу при инжекте
-
---------------------------------------------------------------------------------
+task.spawn(CacheAllAnimations)
 
 local S2_AnimCache = {}
 local S2_ActiveTrackers = {}
@@ -489,6 +531,9 @@ end
 
 local function S2_StartTracker(enemyChar, animTrack, animId)
     local trackerId = tostring(enemyChar) .. "_" .. tostring(tick()) .. "_" .. tostring(math.random(100000, 999999))
+    
+    if IsFriend(enemyChar) then return end
+    
     local parried = false
 
     local tracker = {
@@ -604,7 +649,6 @@ local function S2_HookEnemy(enemyChar)
 
         local id = string.match(anim.AnimationId, "%d+")
         
-        -- СТРОГИЙ ФИЛЬТР: Пропускаем ТОЛЬКО анимации ударов (Slashes/Swings)
         if not id or not SlashAnimIdsCache[id] then 
             return 
         end
@@ -626,7 +670,7 @@ local S2_ChildRemovedConn = nil
 
 local function S2_Enable()
     S2_Disable_Safe()
-    CacheAllAnimations() -- На всякий случай обновляем кэш при включении
+    CacheAllAnimations()
 
     local playerChars = Workspace:FindFirstChild("PlayerCharacters")
     if playerChars then
@@ -936,10 +980,12 @@ local window = Fluent:CreateWindow({
 local Tabs = {
     CombatTab = window:AddTab({ Title = "Combat", Icon = "" }),
     ParryTab = window:AddTab({ Title = "Parry", Icon = "" }),
+    VisualsTab = window:AddTab({ Title = "Visuals", Icon = "" }),
     MiscTab = window:AddTab({ Title = "Misc", Icon = "" }),
     ChecksTab = window:AddTab({ Title = "Checks", Icon = "" }),
     ConfigTab = window:AddTab({ Title = "Config", Icon = "" }),
     MainTab = window:AddTab({ Title = "Main", Icon = "" }),
+    SocialTab = window:AddTab({ Title = "Social", Icon = "" }),
 }
 
 local Options = Fluent.Options
@@ -950,6 +996,207 @@ local Funcs = {
         return Color3.fromRGB(r, g, b)
     end,
 }
+
+local ESPContainer = Instance.new("Folder")
+ESPContainer.Name = "AetherESPContainer_" .. tostring(math.random(1000, 9999))
+pcall(function() ESPContainer.Parent = gethui() end)
+if not ESPContainer.Parent then
+    ESPContainer.Parent = CoreGui
+end
+
+local ESP2DGui = Instance.new("ScreenGui")
+ESP2DGui.Name = "AetherESP2D"
+ESP2DGui.IgnoreGuiInset = true
+ESP2DGui.Parent = ESPContainer
+
+local ESPPlayers = {}
+local ESPEnabled = false
+local ESPMethod = "2D Box"
+local ESPEnemyColor = Color3.fromRGB(255, 0, 0)
+local ESPFriendColor = Color3.fromRGB(0, 255, 0)
+
+local function Create2DBox()
+    local box = {
+        Top = Instance.new("Frame"),
+        Bottom = Instance.new("Frame"),
+        Left = Instance.new("Frame"),
+        Right = Instance.new("Frame")
+    }
+    for _, line in pairs(box) do
+        line.BackgroundColor3 = Color3.new(1, 1, 1)
+        line.BorderSizePixel = 0
+        line.Visible = false
+        line.Parent = ESP2DGui
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Thickness = 1
+        stroke.Color = Color3.new(0, 0, 0)
+        stroke.Parent = line
+    end
+    return box
+end
+
+local function CreateHighlight(adornee)
+    local hl = Instance.new("Highlight")
+    hl.Adornee = adornee
+    hl.FillTransparency = 0.5
+    hl.OutlineTransparency = 0
+    hl.Enabled = false
+    hl.Parent = ESPContainer
+    return hl
+end
+
+local function Create3DBox(adornee)
+    local box = Instance.new("BoxHandleAdornment")
+    box.Adornee = adornee
+    box.AlwaysOnTop = true
+    box.ZIndex = 5
+    box.Transparency = 0.5
+    box.Visible = false
+    box.Parent = ESPContainer
+    return box
+end
+
+local function CleanupESP(player)
+    if ESPPlayers[player] then
+        for _, line in pairs(ESPPlayers[player].Box2D) do
+            line:Destroy()
+        end
+        if ESPPlayers[player].Highlight then ESPPlayers[player].Highlight:Destroy() end
+        if ESPPlayers[player].Box3D then ESPPlayers[player].Box3D:Destroy() end
+        ESPPlayers[player] = nil
+    end
+end
+
+local function SetupESP(player)
+    if player == LocalPlayer then return end
+    CleanupESP(player)
+    
+    local objects = {
+        Box2D = Create2DBox(),
+        Highlight = CreateHighlight(nil),
+        Box3D = Create3DBox(nil)
+    }
+    ESPPlayers[player] = objects
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    SetupESP(p)
+end
+
+Players.PlayerAdded:Connect(function(p)
+    SetupESP(p)
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    CleanupESP(p)
+end)
+
+RunService.RenderStepped:Connect(function()
+    for player, objs in pairs(ESPPlayers) do
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
+        
+        local isAlive = char and hrp and hum and hum.Health > 0
+        local draw2D = false
+        local color = IsFriend(player) and ESPFriendColor or ESPEnemyColor
+
+        if ESPEnabled and isAlive then
+            if ESPMethod == "2D Box" then
+                local cam = workspace.CurrentCamera
+                local pos, onScreen = cam:WorldToViewportPoint(hrp.Position)
+                
+                if onScreen then
+                    local head = char:FindFirstChild("Head")
+                    local headPos = head and head.Position or (hrp.Position + Vector3.new(0, 2, 0))
+                    local footPos = hrp.Position - Vector3.new(0, 3, 0)
+                    
+                    local topPos = cam:WorldToViewportPoint(headPos + Vector3.new(0, 0.5, 0))
+                    local bottomPos = cam:WorldToViewportPoint(footPos)
+                    
+                    local height = math.abs(topPos.Y - bottomPos.Y)
+                    local width = height / 2
+                    local x = pos.X - width / 2
+                    local y = topPos.Y
+
+                    objs.Box2D.Top.Position = UDim2.new(0, x, 0, y)
+                    objs.Box2D.Top.Size = UDim2.new(0, width, 0, 1)
+                    
+                    objs.Box2D.Bottom.Position = UDim2.new(0, x, 0, y + height)
+                    objs.Box2D.Bottom.Size = UDim2.new(0, width, 0, 1)
+                    
+                    objs.Box2D.Left.Position = UDim2.new(0, x, 0, y)
+                    objs.Box2D.Left.Size = UDim2.new(0, 1, 0, height)
+                    
+                    objs.Box2D.Right.Position = UDim2.new(0, x + width, 0, y)
+                    objs.Box2D.Right.Size = UDim2.new(0, 1, 0, height)
+
+                    for _, line in pairs(objs.Box2D) do
+                        line.BackgroundColor3 = color
+                    end
+                    draw2D = true
+                end
+            elseif ESPMethod == "Highlight" then
+                objs.Highlight.Adornee = char
+                objs.Highlight.FillColor = color
+                objs.Highlight.OutlineColor = color
+                objs.Highlight.Enabled = true
+            elseif ESPMethod == "3D Box" then
+                objs.Box3D.Adornee = hrp
+                objs.Box3D.Size = char:GetExtentsSize()
+                objs.Box3D.Color3 = color
+                objs.Box3D.Visible = true
+            end
+        end
+
+        for _, line in pairs(objs.Box2D) do
+            line.Visible = draw2D
+        end
+        if not ESPEnabled or ESPMethod ~= "Highlight" or not isAlive then
+            objs.Highlight.Enabled = false
+        end
+        if not ESPEnabled or ESPMethod ~= "3D Box" or not isAlive then
+            objs.Box3D.Visible = false
+        end
+    end
+end)
+
+Tabs.VisualsTab:AddParagraph({
+    Title = "ESP (Chams)",
+    Content = "Отображение игроков сквозь стены. Полностью скрыто от детектов."
+})
+
+local ESPToggle = Tabs.VisualsTab:AddToggle("ESPToggle", { Title = "Включить ESP", Default = false })
+ESPToggle:OnChanged(function()
+    ESPEnabled = Options.ESPToggle.Value
+end)
+
+local ESPMethodDropdown = Tabs.VisualsTab:AddDropdown("ESPMethodDropdown", {
+    Title = "Метод отрисовки",
+    Values = { "2D Box", "Highlight", "3D Box" },
+    Multi = false,
+    Default = "2D Box",
+})
+ESPMethodDropdown:OnChanged(function(Value)
+    ESPMethod = Value
+end)
+
+local EnemyColorPicker = Tabs.VisualsTab:AddColorpicker("EnemyColorPicker", {
+    Title = "Цвет врагов",
+    Default = Color3.fromRGB(255, 0, 0)
+})
+EnemyColorPicker:OnChanged(function(NewColor)
+    ESPEnemyColor = Funcs.ToRGB(NewColor)
+end)
+
+local FriendColorPicker = Tabs.VisualsTab:AddColorpicker("FriendColorPicker", {
+    Title = "Цвет друзей",
+    Default = Color3.fromRGB(0, 255, 0)
+})
+FriendColorPicker:OnChanged(function(NewColor)
+    ESPFriendColor = Funcs.ToRGB(NewColor)
+end)
 
 local function CheckForAnyParrier(maxDist)
     CacheAllAnimations()
@@ -1007,6 +1254,145 @@ Fluent:Notify({
     Duration = 3
 })
 
+Tabs.SocialTab:AddParagraph({
+    Title = "Друзья",
+    Content = "Друзья защищены от: Авто-парри, Perfect Hit, Aim.\nВведите ник или дисплейник (можно неполный)."
+})
+
+local function CheckAndAddRobloxFriend(plr)
+    if plr ~= LocalPlayer and LocalPlayer:IsFriendsWith(plr.UserId) then
+        if not getgenv().AetherFriends[plr.UserId] then
+            getgenv().AetherFriends[plr.UserId] = plr.DisplayName .. " (@" .. plr.Name .. ")"
+            Fluent:Notify({
+                Title = "Social",
+                Content = "Roblox друг автоматически добавлен в вайтлист:\n" .. plr.DisplayName,
+                Duration = 4
+            })
+        end
+    end
+end
+
+local AutoAddRobloxFriendsToggle = Tabs.SocialTab:AddToggle("AutoAddRobloxFriends", { Title = "Авто-добавление друзей из Roblox", Default = false })
+
+AutoAddRobloxFriendsToggle:OnChanged(function()
+    if Options.AutoAddRobloxFriends.Value then
+        for _, p in ipairs(Players:GetPlayers()) do
+            task.spawn(CheckAndAddRobloxFriend, p)
+        end
+    end
+end)
+
+Players.PlayerAdded:Connect(function(plr)
+    if Options.AutoAddRobloxFriends and Options.AutoAddRobloxFriends.Value then
+        task.spawn(CheckAndAddRobloxFriend, plr)
+    end
+end)
+
+Tabs.SocialTab:AddInput("FriendSearchInput", {
+    Title = "Поиск игрока",
+    Default = "",
+    Placeholder = "Введите ник...",
+    Numeric = false,
+    Finished = false,
+    Callback = function(Value)
+        FriendSearchQuery = Value
+    end
+})
+
+Tabs.SocialTab:AddButton({
+    Title = "➕ Добавить в друзья",
+    Description = "Найдёт игрока по частичному нику и добавит",
+    Callback = function()
+        if FriendSearchQuery == "" then
+            Fluent:Notify({Title = "Friends", Content = "Введите имя игрока.", Duration = 3})
+            return
+        end
+        local results = FindPlayersByPartialName(FriendSearchQuery)
+        if #results == 0 then
+            Fluent:Notify({Title = "Friends", Content = "Игрок «" .. FriendSearchQuery .. "» не найден на сервере.", Duration = 3})
+            return
+        end
+        local p = results[1]
+        if getgenv().AetherFriends[p.UserId] then
+            Fluent:Notify({Title = "Friends", Content = p.DisplayName .. " уже в друзьях.", Duration = 3})
+            return
+        end
+        getgenv().AetherFriends[p.UserId] = p.DisplayName .. " (@" .. p.Name .. ")"
+        local extra = ""
+        if #results > 1 then
+            extra = "\n(Найдено " .. #results .. " совпадений, добавлен первый)"
+        end
+        Fluent:Notify({Title = "Friends", Content = "✅ Добавлен: " .. p.DisplayName .. " (@" .. p.Name .. ")" .. extra, Duration = 4})
+    end
+})
+
+Tabs.SocialTab:AddButton({
+    Title = "➖ Удалить из друзей",
+    Description = "Удалит друга по частичному нику",
+    Callback = function()
+        if FriendSearchQuery == "" then
+            Fluent:Notify({Title = "Friends", Content = "Введите имя игрока.", Duration = 3})
+            return
+        end
+        local query = FriendSearchQuery:lower()
+        for uid, name in pairs(getgenv().AetherFriends) do
+            if name:lower():find(query, 1, true) then
+                getgenv().AetherFriends[uid] = nil
+                Fluent:Notify({Title = "Friends", Content = "❌ Удалён: " .. name, Duration = 3})
+                return
+            end
+        end
+        local results = FindPlayersByPartialName(FriendSearchQuery)
+        for _, p in ipairs(results) do
+            if getgenv().AetherFriends[p.UserId] then
+                local name = getgenv().AetherFriends[p.UserId]
+                getgenv().AetherFriends[p.UserId] = nil
+                Fluent:Notify({Title = "Friends", Content = "❌ Удалён: " .. name, Duration = 3})
+                return
+            end
+        end
+        Fluent:Notify({Title = "Friends", Content = "Друг с ником «" .. FriendSearchQuery .. "» не найден.", Duration = 3})
+    end
+})
+
+Tabs.SocialTab:AddButton({
+    Title = "📋 Показать список друзей",
+    Description = "",
+    Callback = function()
+        local list = {}
+        for uid, name in pairs(getgenv().AetherFriends) do
+            local online = false
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.UserId == uid then online = true break end
+            end
+            table.insert(list, (online and "🟢 " or "⚫ ") .. name)
+        end
+        if #list == 0 then
+            Fluent:Notify({Title = "Friends", Content = "Список друзей пуст.", Duration = 3})
+        else
+            Fluent:Notify({Title = "Друзья (" .. #list .. ")", Content = table.concat(list, "\n"), Duration = 10})
+        end
+    end
+})
+
+Tabs.SocialTab:AddButton({
+    Title = "🗑️ Очистить всех друзей",
+    Description = "",
+    Callback = function()
+        window:Dialog({
+            Title = "Подтверждение",
+            Content = "Удалить всех друзей?",
+            Buttons = {
+                {Title = "Да", Callback = function()
+                    getgenv().AetherFriends = {}
+                    Fluent:Notify({Title = "Friends", Content = "Список друзей очищен.", Duration = 3})
+                end},
+                {Title = "Нет", Callback = function() end}
+            }
+        })
+    end
+})
+
 local AutoParryToggle = Tabs.ParryTab:AddToggle("AutoParryToggle", { Title = "Авто-парри", Default = false })
 
 AutoParryToggle:OnChanged(function()
@@ -1027,6 +1413,19 @@ AutoParryToggle:OnChanged(function()
                     pcall(function()
                         local hitboxPart = Child.Parent
                         local hitboxPos = hitboxPart.Position
+                        
+                        local attackerChar = nil
+                        local current = Child.Parent
+                        local playerCharsFolder = workspace:FindFirstChild("PlayerCharacters")
+                        while current and current ~= workspace do
+                            if playerCharsFolder and current.Parent == playerCharsFolder then
+                                attackerChar = current
+                                break
+                            end
+                            current = current.Parent
+                        end
+                        if attackerChar and IsFriend(attackerChar) then return end
+
                         local myPos = game.Players.LocalPlayer.Character.HumanoidRootPart.Position
                         local dist = (hitboxPos - myPos).Magnitude
 
@@ -1483,6 +1882,200 @@ local ReachDistanceInput = Tabs.CombatTab:AddInput("ReachDistance", {
     end
 })
 
+Tabs.CombatTab:AddParagraph({
+    Title = "Aim",
+    Content = "Автоматически наводит камеру на голову ближайшего врага."
+})
+
+local AimToggle = Tabs.CombatTab:AddToggle("AimToggle", { Title = "Aim (на голову)", Default = false })
+
+local AimPredictToggle = Tabs.CombatTab:AddToggle("AimPredictToggle", { Title = "Predict (предикт движения)", Default = false })
+
+local AimWallCheckToggle = Tabs.CombatTab:AddToggle("AimWallCheckToggle", { Title = "Wall Check (не целиться через стены)", Default = true })
+
+local AimSmoothnessValue = 0
+local AimWallCheckEnabled = true
+
+local AimSmoothnessInput = Tabs.CombatTab:AddInput("AimSmoothnessInput", {
+    Title = "Smoothness (0 = мгновенно, 1.5 = плавно)",
+    Default = "0",
+    Placeholder = "0",
+    Numeric = true,
+    Finished = true,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num then
+            AimSmoothnessValue = math.clamp(num, 0, 1.5)
+        end
+    end
+})
+
+local AimPredictInput = Tabs.CombatTab:AddInput("AimPredictInput", {
+    Title = "Predict Value (0.1 — 1.0)",
+    Default = "0.3",
+    Placeholder = "0.3",
+    Numeric = true,
+    Finished = true,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num then
+            AimPredictValue = math.clamp(num, 0.05, 1.0)
+        end
+    end
+})
+
+local AimDistInput = Tabs.CombatTab:AddInput("AimDistInput", {
+    Title = "Макс. дистанция Aim (studs)",
+    Default = "100",
+    Placeholder = "100",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and num >= 5 then
+            AimMaxDistance = num
+        end
+    end
+})
+
+local AimToggleBind = Tabs.CombatTab:AddKeybind("AimToggleBind", {
+    Title = "Бинд Aim",
+    Mode = "Toggle",
+    Default = "P",
+    Callback = function(Value)
+        Options.AimToggle:SetValue(not Options.AimToggle.Value)
+        if Options.AimToggle.Value then
+            Fluent:Notify({ Title = "Aether Hub", Content = "Aim ВКЛЮЧЁН.", Duration = 2 })
+        else
+            Fluent:Notify({ Title = "Aether Hub", Content = "Aim выключен.", Duration = 2 })
+        end
+    end,
+})
+
+AimPredictToggle:OnChanged(function()
+    AimPredictEnabled = Options.AimPredictToggle.Value
+end)
+
+AimWallCheckToggle:OnChanged(function()
+    AimWallCheckEnabled = Options.AimWallCheckToggle.Value
+end)
+
+local function AimIsVisibleTarget(fromPos, targetPos, targetChar)
+    if not AimWallCheckEnabled then return true end
+
+    local filter = {}
+    
+    if LocalPlayer.Character then
+        table.insert(filter, LocalPlayer.Character)
+    end
+    
+    local playerChars = Workspace:FindFirstChild("PlayerCharacters")
+    if playerChars then
+        table.insert(filter, playerChars)
+    end
+    
+    if Workspace:FindFirstChild("EffectsJunk") then table.insert(filter, Workspace.EffectsJunk) end
+    if Workspace:FindFirstChild("Junk") then table.insert(filter, Workspace.Junk) end
+    if Workspace:FindFirstChild("Projectiles") then table.insert(filter, Workspace.Projectiles) end
+
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = filter
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.IgnoreWater = true
+    params.RespectCanCollide = true
+
+    local dir = targetPos - fromPos
+    local ray = Workspace:Raycast(fromPos, dir, params)
+
+    if not ray then return true end
+
+    local hitDist = (ray.Position - fromPos).Magnitude
+    local targetDist = dir.Magnitude
+    return hitDist >= targetDist * 0.85
+end
+
+AimToggle:OnChanged(function()
+    AimEnabled = Options.AimToggle.Value
+
+    if AimEnabled then
+        if AimConnection then AimConnection:Disconnect() end
+
+        RunService:BindToRenderStep("AetherAim", Enum.RenderPriority.Camera.Value + 1, function()
+            if not AimEnabled then return end
+
+            local char = LocalPlayer.Character
+            if not char then return end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChild("Humanoid")
+            if not hrp or not hum or hum.Health <= 0 then return end
+
+            local nearestChar = nil
+            local nearestDist = AimMaxDistance + 1
+
+            local playerChars = Workspace:FindFirstChild("PlayerCharacters")
+            if not playerChars then return end
+
+            local cam = workspace.CurrentCamera
+            if not cam then return end
+
+            for _, pChar in ipairs(playerChars:GetChildren()) do
+                if pChar ~= char and not IsFriend(pChar) then
+                    local eHrp = pChar:FindFirstChild("HumanoidRootPart")
+                    local eHum = pChar:FindFirstChild("Humanoid")
+                    local eHead = pChar:FindFirstChild("Head")
+                    if eHrp and eHum and eHead and eHum.Health > 0 then
+                        local dist = (hrp.Position - eHrp.Position).Magnitude
+                        if dist < nearestDist and dist <= AimMaxDistance then
+                            if AimIsVisibleTarget(cam.CFrame.Position, eHead.Position, pChar) then
+                                nearestDist = dist
+                                nearestChar = pChar
+                            end
+                        end
+                    end
+                end
+            end
+
+            if not nearestChar then return end
+
+            local eHead = nearestChar:FindFirstChild("Head")
+            local eHrp = nearestChar:FindFirstChild("HumanoidRootPart")
+            if not eHead or not eHrp then return end
+
+            local targetPos = eHead.Position
+
+            if AimPredictEnabled then
+                local eHum = nearestChar:FindFirstChild("Humanoid")
+                if eHum then
+                    local moveDir = eHum.MoveDirection
+                    if moveDir.Magnitude > 0.1 then
+                        local velocity = eHrp.AssemblyLinearVelocity
+                        targetPos = targetPos + velocity * AimPredictValue
+                    end
+                end
+            end
+
+            if AimSmoothnessValue <= 0.01 then
+                cam.CFrame = CFrame.new(cam.CFrame.Position, targetPos)
+            else
+                local currentLook = cam.CFrame.LookVector
+                local desiredLook = (targetPos - cam.CFrame.Position).Unit
+                local alpha = math.clamp(1 - AimSmoothnessValue, 0.05, 1)
+                local smoothed = currentLook:Lerp(desiredLook, alpha)
+                cam.CFrame = CFrame.new(cam.CFrame.Position, cam.CFrame.Position + smoothed)
+            end
+        end)
+
+        AimConnection = {Disconnect = function()
+            pcall(function() RunService:UnbindFromRenderStep("AetherAim") end)
+        end}
+    else
+        if AimConnection then
+            AimConnection:Disconnect()
+            AimConnection = nil
+        end
+    end
+end)
+
 local PerfectHitToggle = Tabs.CombatTab:AddToggle("PerfectHitToggle", { Title = "Perfect Hit (100% Hit)", Default = false })
 
 local PH_IsSwinging = false
@@ -1560,6 +2153,9 @@ RunService.Heartbeat:Connect(function()
 
     for _, enemyChar in ipairs(playerChars:GetChildren()) do
         if enemyChar ~= char and not PH_HitCache[enemyChar] then
+            
+            if IsFriend(enemyChar) then continue end
+
             local eHum = enemyChar:FindFirstChild("Humanoid")
             local eTorso = enemyChar:FindFirstChild("Torso") or enemyChar:FindFirstChild("HumanoidRootPart")
 
