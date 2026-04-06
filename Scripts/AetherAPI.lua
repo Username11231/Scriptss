@@ -15,8 +15,9 @@ local AetherDependencies = {
 }
 
 local AetherAPI = {
-
-    Version = "v3",
+    
+    Version = "v4",
+    Changelog = "Улучшение Instance.hide_from_game, терь её тяжелее детектить.",
     
     Memory = {},
     Metatable = {},
@@ -230,7 +231,7 @@ RegisterFunction("Metatable", "is_readonly",
 )
 
 RegisterFunction("Instance", "hide_from_game", 
-    "Скрывает объект от методов античита (GetChildren, GetDescendants, FindFirstChild).", 
+    "Скрывает объект от методов античита (GetChildren, FindFirstChild) и блокирует срабатывание сигналов (ChildAdded, Touched).", 
     [[AetherAPI.Instance.hide_from_game(workspace.MyHitbox)]], 
     function(instance)
         AetherDependencies.invisible_instances[instance] = true
@@ -504,7 +505,6 @@ RegisterFunction("Environment", "is_executor_closure",
     end
 )
 
-
 local old_namecall, old_index, old_newindex
 
 old_index = hookmetamethod(game, "__index", function(self, key)
@@ -546,72 +546,106 @@ end)
 old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     
-    if not checkcaller() and typeof(self) == "Instance" then
-        if method == "Destroy" or method == "Remove" or method == "ClearAllChildren" then
-            if AetherDependencies.protected_instances[self] then
-                return
+    if not checkcaller() then
+        if typeof(self) == "Instance" then
+            if method == "Destroy" or method == "Remove" or method == "ClearAllChildren" then
+                if AetherDependencies.protected_instances[self] then
+                    return
+                end
             end
-        end
 
-        if method == "GetChildren" or method == "GetDescendants" then
-            local result = old_namecall(self, ...)
-            if type(result) == "table" then
-                local filtered = {}
-                for i = 1, #result do
-                    if not AetherDependencies.invisible_instances[result[i]] then
-                        filtered[#filtered + 1] = result[i]
+            if method == "GetChildren" or method == "GetDescendants" then
+                local result = old_namecall(self, ...)
+                if type(result) == "table" then
+                    local filtered = {}
+                    for i = 1, #result do
+                        if not AetherDependencies.invisible_instances[result[i]] then
+                            filtered[#filtered + 1] = result[i]
+                        end
+                    end
+                    return filtered
+                end
+                return result
+            end
+
+            if method == "FindFirstChild" or method == "WaitForChild" or method == "FindFirstChildOfClass" or method == "FindFirstChildWhichIsA" then
+                local result = old_namecall(self, ...)
+                if result and AetherDependencies.invisible_instances[result] then
+                    return nil
+                end
+                return result
+            end
+            
+            if method == "IsA" then
+                local args = {...}
+                if AetherDependencies.class_spoofs[self] then
+                    if args[1] == AetherDependencies.class_spoofs[self] then return true end
+                end
+            end
+
+            local className = old_index(self, "ClassName")
+
+            if className == "RemoteEvent" and method == "FireServer" then
+                if AetherDependencies.remote_fire_blocks[self] then
+                    return
+                end
+                if AetherDependencies.remote_fire_hooks[self] then
+                    local args = {...}
+                    local action, new_args = AetherDependencies.remote_fire_hooks[self](args)
+                    if action == "drop" then
+                        return
+                    elseif action == "modify" then
+                        return old_namecall(self, unpack(new_args))
                     end
                 end
-                return filtered
             end
-            return result
-        end
 
-        if method == "FindFirstChild" or method == "WaitForChild" or method == "FindFirstChildOfClass" or method == "FindFirstChildWhichIsA" then
-            local result = old_namecall(self, ...)
-            if result and AetherDependencies.invisible_instances[result] then
-                return nil
-            end
-            return result
-        end
-        
-        if method == "IsA" then
-            local args = {...}
-            if AetherDependencies.class_spoofs[self] then
-                if args[1] == AetherDependencies.class_spoofs[self] then return true end
-            end
-        end
-
-        local className = old_index(self, "ClassName")
-
-        if className == "RemoteEvent" and method == "FireServer" then
-            if AetherDependencies.remote_fire_blocks[self] then
-                return
-            end
-            if AetherDependencies.remote_fire_hooks[self] then
-                local args = {...}
-                local action, new_args = AetherDependencies.remote_fire_hooks[self](args)
-                if action == "drop" then
-                    return
-                elseif action == "modify" then
-                    return old_namecall(self, unpack(new_args))
+            if className == "RemoteFunction" and method == "InvokeServer" then
+                if AetherDependencies.remote_fire_blocks[self] then
+                    return nil
+                end
+                if AetherDependencies.remote_invoke_hooks[self] then
+                    local args = {...}
+                    local action, new_args = AetherDependencies.remote_invoke_hooks[self](args)
+                    if action == "drop" then
+                        return nil
+                    elseif action == "modify" then
+                        return old_namecall(self, unpack(new_args))
+                    elseif action == "spoof_return" then
+                        return new_args
+                    end
                 end
             end
-        end
-
-        if className == "RemoteFunction" and method == "InvokeServer" then
-            if AetherDependencies.remote_fire_blocks[self] then
-                return nil
-            end
-            if AetherDependencies.remote_invoke_hooks[self] then
+            
+        elseif typeof(self) == "RBXScriptSignal" then
+            if method == "Connect" or method == "ConnectParallel" or method == "Once" then
                 local args = {...}
-                local action, new_args = AetherDependencies.remote_invoke_hooks[self](args)
-                if action == "drop" then
-                    return nil
-                elseif action == "modify" then
-                    return old_namecall(self, unpack(new_args))
-                elseif action == "spoof_return" then
-                    return new_args
+                local original_func = args[1]
+                if type(original_func) == "function" then
+                    args[1] = newcclosure(function(...)
+                        local cargs = {...}
+                        for i = 1, #cargs do
+                            if typeof(cargs[i]) == "Instance" and AetherDependencies.invisible_instances[cargs[i]] then
+                                return
+                            end
+                        end
+                        return original_func(...)
+                    end)
+                    return old_namecall(self, unpack(args))
+                end
+            elseif method == "Wait" then
+                while true do
+                    local wargs = {old_namecall(self, ...)}
+                    local hidden = false
+                    for i = 1, #wargs do
+                        if typeof(wargs[i]) == "Instance" and AetherDependencies.invisible_instances[wargs[i]] then
+                            hidden = true
+                            break
+                        end
+                    end
+                    if not hidden then
+                        return unpack(wargs)
+                    end
                 end
             end
         end
