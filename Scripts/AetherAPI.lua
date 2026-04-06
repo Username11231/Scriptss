@@ -20,7 +20,7 @@ local AetherDependencies = {
 
 local AetherAPI = {
 
-    Version = "v2"
+    Version = "v2",
     
     Memory = {},
     Metatable = {},
