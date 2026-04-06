@@ -1,4 +1,7 @@
 local AetherDependencies = {
+
+    Version = "v1"
+    
     invisible_instances = {},
     protected_instances = {},
     property_spoofs = {},
@@ -231,6 +234,7 @@ RegisterFunction("Instance", "hide_from_game",
     [[AetherAPI.Instance.hide_from_game(workspace.MyHitbox)]], 
     function(instance)
         AetherDependencies.invisible_instances[instance] = true
+        return instance
     end
 )
 
@@ -239,6 +243,7 @@ RegisterFunction("Instance", "unhide_from_game",
     [[AetherAPI.Instance.unhide_from_game(workspace.MyHitbox)]], 
     function(instance)
         AetherDependencies.invisible_instances[instance] = nil
+        return instance
     end
 )
 
@@ -247,6 +252,7 @@ RegisterFunction("Instance", "protect_from_deletion",
     [[AetherAPI.Instance.protect_from_deletion(workspace.MyBase)]], 
     function(instance)
         AetherDependencies.protected_instances[instance] = true
+        return instance
     end
 )
 
@@ -255,6 +261,7 @@ RegisterFunction("Instance", "unprotect_from_deletion",
     [[AetherAPI.Instance.unprotect_from_deletion(workspace.MyBase)]], 
     function(instance)
         AetherDependencies.protected_instances[instance] = nil
+        return instance
     end
 )
 
@@ -266,6 +273,7 @@ RegisterFunction("Instance", "spoof_property",
             AetherDependencies.property_spoofs[instance] = {}
         end
         AetherDependencies.property_spoofs[instance][property] = fake_value
+        return instance
     end
 )
 
@@ -276,6 +284,7 @@ RegisterFunction("Instance", "unspoof_property",
         if AetherDependencies.property_spoofs[instance] then
             AetherDependencies.property_spoofs[instance][property] = nil
         end
+        return instance
     end
 )
 
@@ -287,6 +296,7 @@ RegisterFunction("Instance", "block_property_write",
             AetherDependencies.property_blocks[instance] = {}
         end
         AetherDependencies.property_blocks[instance][property] = true
+        return instance
     end
 )
 
@@ -297,6 +307,7 @@ RegisterFunction("Instance", "unblock_property_write",
         if AetherDependencies.property_blocks[instance] then
             AetherDependencies.property_blocks[instance][property] = nil
         end
+        return instance
     end
 )
 
@@ -304,10 +315,8 @@ RegisterFunction("Instance", "spoof_class",
     "Подменяет возвращаемое значение ClassName и метода IsA.", 
     [[AetherAPI.Instance.spoof_class(Folder, "Part")]], 
     function(instance, fake_class)
-        if not AetherDependencies.class_spoofs[instance] then
-            AetherDependencies.class_spoofs[instance] = {}
-        end
         AetherDependencies.class_spoofs[instance] = fake_class
+        return instance
     end
 )
 
@@ -499,63 +508,65 @@ AetherDependencies.old_namecall = hookmetamethod(game, "__namecall", function(se
     local args = {...}
     
     if not checkcaller() then
-        if AetherDependencies.protected_instances[self] then
-            if method == "Destroy" or method == "Remove" or method == "ClearAllChildren" then
-                return
-            end
-        end
-
-        if method == "GetChildren" or method == "GetDescendants" then
-            local result = AetherDependencies.old_namecall(self, ...)
-            local filtered = {}
-            for i = 1, #result do
-                if not AetherDependencies.invisible_instances[result[i]] then
-                    filtered[#filtered + 1] = result[i]
-                end
-            end
-            return filtered
-        end
-
-        if method == "FindFirstChild" or method == "WaitForChild" or method == "FindFirstChildOfClass" or method == "FindFirstChildWhichIsA" then
-            local result = AetherDependencies.old_namecall(self, ...)
-            if result and AetherDependencies.invisible_instances[result] then
-                return method == "WaitForChild" and task.wait(9e9) or nil
-            end
-            return result
-        end
-        
-        if method == "IsA" then
-            if AetherDependencies.class_spoofs[self] then
-                return args[1] == AetherDependencies.class_spoofs[self] or AetherDependencies.old_namecall(self, ...)
-            end
-        end
-
-        if self:IsA("RemoteEvent") and method == "FireServer" then
-            if AetherDependencies.remote_fire_blocks[self] then
-                return
-            end
-            if AetherDependencies.remote_fire_hooks[self] then
-                local action, new_args = AetherDependencies.remote_fire_hooks[self](args)
-                if action == "drop" then
+        if typeof(self) == "Instance" then
+            if AetherDependencies.protected_instances[self] then
+                if method == "Destroy" or method == "Remove" or method == "ClearAllChildren" then
                     return
-                elseif action == "modify" then
-                    return AetherDependencies.old_namecall(self, unpack(new_args))
                 end
             end
-        end
 
-        if self:IsA("RemoteFunction") and method == "InvokeServer" then
-            if AetherDependencies.remote_fire_blocks[self] then
-                return task.wait(9e9)
+            if method == "GetChildren" or method == "GetDescendants" then
+                local result = AetherDependencies.old_namecall(self, ...)
+                local filtered = {}
+                for i = 1, #result do
+                    if not AetherDependencies.invisible_instances[result[i]] then
+                        filtered[#filtered + 1] = result[i]
+                    end
+                end
+                return filtered
             end
-            if AetherDependencies.remote_invoke_hooks[self] then
-                local action, new_args = AetherDependencies.remote_invoke_hooks[self](args)
-                if action == "drop" then
+
+            if method == "FindFirstChild" or method == "WaitForChild" or method == "FindFirstChildOfClass" or method == "FindFirstChildWhichIsA" then
+                local result = AetherDependencies.old_namecall(self, ...)
+                if result and AetherDependencies.invisible_instances[result] then
+                    return method == "WaitForChild" and task.wait(9e9) or nil
+                end
+                return result
+            end
+            
+            if method == "IsA" then
+                if AetherDependencies.class_spoofs[self] then
+                    return args[1] == AetherDependencies.class_spoofs[self] or AetherDependencies.old_namecall(self, ...)
+                end
+            end
+
+            if self:IsA("RemoteEvent") and method == "FireServer" then
+                if AetherDependencies.remote_fire_blocks[self] then
+                    return
+                end
+                if AetherDependencies.remote_fire_hooks[self] then
+                    local action, new_args = AetherDependencies.remote_fire_hooks[self](args)
+                    if action == "drop" then
+                        return
+                    elseif action == "modify" then
+                        return AetherDependencies.old_namecall(self, unpack(new_args))
+                    end
+                end
+            end
+
+            if self:IsA("RemoteFunction") and method == "InvokeServer" then
+                if AetherDependencies.remote_fire_blocks[self] then
                     return task.wait(9e9)
-                elseif action == "modify" then
-                    return AetherDependencies.old_namecall(self, unpack(new_args))
-                elseif action == "spoof_return" then
-                    return new_args
+                end
+                if AetherDependencies.remote_invoke_hooks[self] then
+                    local action, new_args = AetherDependencies.remote_invoke_hooks[self](args)
+                    if action == "drop" then
+                        return task.wait(9e9)
+                    elseif action == "modify" then
+                        return AetherDependencies.old_namecall(self, unpack(new_args))
+                    elseif action == "spoof_return" then
+                        return new_args
+                    end
                 end
             end
         end
@@ -566,20 +577,22 @@ end)
 
 AetherDependencies.old_index = hookmetamethod(game, "__index", function(self, key)
     if not checkcaller() then
-        if AetherDependencies.global_env_spoofs[self] and AetherDependencies.global_env_spoofs[self][key] ~= nil then
-            return AetherDependencies.global_env_spoofs[self][key]
-        end
-
-        if AetherDependencies.property_spoofs[self] and AetherDependencies.property_spoofs[self][key] ~= nil then
-            local spoofed = AetherDependencies.property_spoofs[self][key]
-            if type(spoofed) == "function" then
-                return spoofed()
+        if typeof(self) == "Instance" then
+            if AetherDependencies.global_env_spoofs[self] and AetherDependencies.global_env_spoofs[self][key] ~= nil then
+                return AetherDependencies.global_env_spoofs[self][key]
             end
-            return spoofed
-        end
-        
-        if key == "ClassName" and AetherDependencies.class_spoofs[self] then
-            return AetherDependencies.class_spoofs[self]
+
+            if AetherDependencies.property_spoofs[self] and AetherDependencies.property_spoofs[self][key] ~= nil then
+                local spoofed = AetherDependencies.property_spoofs[self][key]
+                if type(spoofed) == "function" then
+                    return spoofed()
+                end
+                return spoofed
+            end
+            
+            if key == "ClassName" and AetherDependencies.class_spoofs[self] then
+                return AetherDependencies.class_spoofs[self]
+            end
         end
     end
     return AetherDependencies.old_index(self, key)
@@ -587,11 +600,13 @@ end)
 
 AetherDependencies.old_newindex = hookmetamethod(game, "__newindex", function(self, key, value)
     if not checkcaller() then
-        if AetherDependencies.protected_instances[self] and key == "Parent" and value == nil then
-            return
-        end
-        if AetherDependencies.property_blocks[self] and AetherDependencies.property_blocks[self][key] then
-            return
+        if typeof(self) == "Instance" then
+            if AetherDependencies.protected_instances[self] and key == "Parent" and value == nil then
+                return
+            end
+            if AetherDependencies.property_blocks[self] and AetherDependencies.property_blocks[self][key] then
+                return
+            end
         end
     end
     return AetherDependencies.old_newindex(self, key, value)
