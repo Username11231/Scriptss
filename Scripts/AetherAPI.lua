@@ -12,12 +12,13 @@ local AetherDependencies = {
     remote_fire_blocks = make_weak(),
     remote_invoke_hooks = make_weak(),
     global_env_spoofs = make_weak(),
+    locked_instances = make_weak(),
 }
 
 local AetherAPI = {
     
-    Version = "v4",
-    Changelog = "Улучшение Instance.hide_from_game, терь её тяжелее детектить.",
+    Version = "v5",
+    Changelog = "Функции lock_instance_modifying и unlock_instance_modifying",
     
     Memory = {},
     Metatable = {},
@@ -39,6 +40,22 @@ local function RegisterFunction(category, name, description, example, func)
     })
     AetherAPI[category][name] = wrapper
 end
+
+RegisterFunction("Instance", "lock_instance_modifying", 
+    "Полностью блокирует любые изменения инстанса (свойства, удаление, добавление детей) со стороны игры.", 
+    [[AetherAPI.Instance.lock_instance_modifying(game:GetService("Lighting"))]], 
+    function(instance)
+        AetherDependencies.locked_instances[instance] = true
+    end
+)
+
+RegisterFunction("Instance", "unlock_instance_modifying", 
+    "Снимает полную блокировку изменений с инстанса.", 
+    [[AetherAPI.Instance.unlock_instance_modifying(game:GetService("Lighting"))]], 
+    function(instance)
+        AetherDependencies.locked_instances[instance] = nil
+    end
+)
 
 RegisterFunction("Memory", "find_function_by_name", 
     "Ищет Luau-функцию в памяти сборщика мусора (GC) по её имени.", 
@@ -530,6 +547,14 @@ end)
 
 old_newindex = hookmetamethod(game, "__newindex", function(self, key, value)
     if not checkcaller() and typeof(self) == "Instance" then
+        if AetherDependencies.locked_instances[self] then
+            return
+        end
+        
+        if key == "Parent" and typeof(value) == "Instance" and AetherDependencies.locked_instances[value] then
+            return
+        end
+
         if key == "Parent" and value == nil then
             if AetherDependencies.protected_instances[self] then
                 return
@@ -550,6 +575,12 @@ old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
         if typeof(self) == "Instance" then
             if method == "Destroy" or method == "Remove" or method == "ClearAllChildren" then
                 if AetherDependencies.protected_instances[self] then
+                    return
+                end
+            end
+
+            if method == "Destroy" or method == "Remove" or method == "ClearAllChildren" then
+                if AetherDependencies.protected_instances[self] or AetherDependencies.locked_instances[self] then
                     return
                 end
             end
