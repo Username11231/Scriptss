@@ -1,16 +1,17 @@
-local AetherDependencies = {
+local function make_weak()
+    return setmetatable({}, {__mode = "k"})
+end
 
-    Version = "v1"
-    
-    invisible_instances = {},
-    protected_instances = {},
-    property_spoofs = {},
-    property_blocks = {},
-    class_spoofs = {},
-    remote_fire_hooks = {},
-    remote_fire_blocks = {},
-    remote_invoke_hooks = {},
-    global_env_spoofs = {},
+local AetherDependencies = {
+    invisible_instances = make_weak(),
+    protected_instances = make_weak(),
+    property_spoofs = make_weak(),
+    property_blocks = make_weak(),
+    class_spoofs = make_weak(),
+    remote_fire_hooks = make_weak(),
+    remote_fire_blocks = make_weak(),
+    remote_invoke_hooks = make_weak(),
+    global_env_spoofs = make_weak(),
     
     old_namecall = nil,
     old_index = nil,
@@ -18,6 +19,9 @@ local AetherDependencies = {
 }
 
 local AetherAPI = {
+
+    Version = "v2"
+    
     Memory = {},
     Metatable = {},
     Instance = {},
@@ -505,18 +509,17 @@ RegisterFunction("Environment", "is_executor_closure",
 
 AetherDependencies.old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
-    local args = {...}
     
-    if not checkcaller() then
-        if typeof(self) == "Instance" then
+    if not checkcaller() and typeof(self) == "Instance" then
+        if method == "Destroy" or method == "Remove" or method == "ClearAllChildren" then
             if AetherDependencies.protected_instances[self] then
-                if method == "Destroy" or method == "Remove" or method == "ClearAllChildren" then
-                    return
-                end
+                return
             end
+        end
 
-            if method == "GetChildren" or method == "GetDescendants" then
-                local result = AetherDependencies.old_namecall(self, ...)
+        if method == "GetChildren" or method == "GetDescendants" then
+            local result = AetherDependencies.old_namecall(self, ...)
+            if type(result) == "table" then
                 local filtered = {}
                 for i = 1, #result do
                     if not AetherDependencies.invisible_instances[result[i]] then
@@ -525,48 +528,57 @@ AetherDependencies.old_namecall = hookmetamethod(game, "__namecall", function(se
                 end
                 return filtered
             end
+            return result
+        end
 
-            if method == "FindFirstChild" or method == "WaitForChild" or method == "FindFirstChildOfClass" or method == "FindFirstChildWhichIsA" then
-                local result = AetherDependencies.old_namecall(self, ...)
-                if result and AetherDependencies.invisible_instances[result] then
-                    return method == "WaitForChild" and task.wait(9e9) or nil
+        if method == "FindFirstChild" or method == "WaitForChild" or method == "FindFirstChildOfClass" or method == "FindFirstChildWhichIsA" then
+            local result = AetherDependencies.old_namecall(self, ...)
+            if result and AetherDependencies.invisible_instances[result] then
+                if method == "WaitForChild" then
+                    return coroutine.yield()
                 end
-                return result
+                return nil
             end
-            
-            if method == "IsA" then
-                if AetherDependencies.class_spoofs[self] then
-                    return args[1] == AetherDependencies.class_spoofs[self] or AetherDependencies.old_namecall(self, ...)
-                end
+            return result
+        end
+        
+        if method == "IsA" then
+            local args = {...}
+            if AetherDependencies.class_spoofs[self] then
+                if args[1] == AetherDependencies.class_spoofs[self] then return true end
             end
+        end
 
-            if self:IsA("RemoteEvent") and method == "FireServer" then
-                if AetherDependencies.remote_fire_blocks[self] then
+        local className = AetherDependencies.old_index(self, "ClassName")
+
+        if className == "RemoteEvent" and method == "FireServer" then
+            if AetherDependencies.remote_fire_blocks[self] then
+                return
+            end
+            if AetherDependencies.remote_fire_hooks[self] then
+                local args = {...}
+                local action, new_args = AetherDependencies.remote_fire_hooks[self](args)
+                if action == "drop" then
                     return
-                end
-                if AetherDependencies.remote_fire_hooks[self] then
-                    local action, new_args = AetherDependencies.remote_fire_hooks[self](args)
-                    if action == "drop" then
-                        return
-                    elseif action == "modify" then
-                        return AetherDependencies.old_namecall(self, unpack(new_args))
-                    end
+                elseif action == "modify" then
+                    return AetherDependencies.old_namecall(self, unpack(new_args))
                 end
             end
+        end
 
-            if self:IsA("RemoteFunction") and method == "InvokeServer" then
-                if AetherDependencies.remote_fire_blocks[self] then
-                    return task.wait(9e9)
-                end
-                if AetherDependencies.remote_invoke_hooks[self] then
-                    local action, new_args = AetherDependencies.remote_invoke_hooks[self](args)
-                    if action == "drop" then
-                        return task.wait(9e9)
-                    elseif action == "modify" then
-                        return AetherDependencies.old_namecall(self, unpack(new_args))
-                    elseif action == "spoof_return" then
-                        return new_args
-                    end
+        if className == "RemoteFunction" and method == "InvokeServer" then
+            if AetherDependencies.remote_fire_blocks[self] then
+                return coroutine.yield()
+            end
+            if AetherDependencies.remote_invoke_hooks[self] then
+                local args = {...}
+                local action, new_args = AetherDependencies.remote_invoke_hooks[self](args)
+                if action == "drop" then
+                    return coroutine.yield()
+                elseif action == "modify" then
+                    return AetherDependencies.old_namecall(self, unpack(new_args))
+                elseif action == "spoof_return" then
+                    return new_args
                 end
             end
         end
@@ -576,37 +588,36 @@ AetherDependencies.old_namecall = hookmetamethod(game, "__namecall", function(se
 end)
 
 AetherDependencies.old_index = hookmetamethod(game, "__index", function(self, key)
-    if not checkcaller() then
-        if typeof(self) == "Instance" then
-            if AetherDependencies.global_env_spoofs[self] and AetherDependencies.global_env_spoofs[self][key] ~= nil then
-                return AetherDependencies.global_env_spoofs[self][key]
-            end
+    if not checkcaller() and typeof(self) == "Instance" then
+        if AetherDependencies.global_env_spoofs[self] and AetherDependencies.global_env_spoofs[self][key] ~= nil then
+            return AetherDependencies.global_env_spoofs[self][key]
+        end
 
-            if AetherDependencies.property_spoofs[self] and AetherDependencies.property_spoofs[self][key] ~= nil then
-                local spoofed = AetherDependencies.property_spoofs[self][key]
-                if type(spoofed) == "function" then
-                    return spoofed()
-                end
-                return spoofed
+        if AetherDependencies.property_spoofs[self] and AetherDependencies.property_spoofs[self][key] ~= nil then
+            local spoofed = AetherDependencies.property_spoofs[self][key]
+            if type(spoofed) == "function" then
+                return spoofed()
             end
-            
-            if key == "ClassName" and AetherDependencies.class_spoofs[self] then
-                return AetherDependencies.class_spoofs[self]
-            end
+            return spoofed
+        end
+        
+        if key == "ClassName" and AetherDependencies.class_spoofs[self] then
+            return AetherDependencies.class_spoofs[self]
         end
     end
     return AetherDependencies.old_index(self, key)
 end)
 
 AetherDependencies.old_newindex = hookmetamethod(game, "__newindex", function(self, key, value)
-    if not checkcaller() then
-        if typeof(self) == "Instance" then
-            if AetherDependencies.protected_instances[self] and key == "Parent" and value == nil then
+    if not checkcaller() and typeof(self) == "Instance" then
+        if key == "Parent" and value == nil then
+            if AetherDependencies.protected_instances[self] then
                 return
             end
-            if AetherDependencies.property_blocks[self] and AetherDependencies.property_blocks[self][key] then
-                return
-            end
+        end
+        
+        if AetherDependencies.property_blocks[self] and AetherDependencies.property_blocks[self][key] then
+            return
         end
     end
     return AetherDependencies.old_newindex(self, key, value)
