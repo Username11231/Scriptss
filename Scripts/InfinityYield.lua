@@ -2,6 +2,8 @@ if IY_LOADED and not _G.IY_DEBUG == true then
     return
 end
 
+currentVersion = "1.0.1"
+
 pcall(function() getgenv().IY_LOADED = true end)
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -153,8 +155,6 @@ if makefolder and isfolder and writefile and isfile and readfile then
 		end
 	end)
 end
-
-currentVersion = "6.3.4"
 
 ScaledHolder = Instance.new("Frame")
 Scale = Instance.new("UIScale")
@@ -4444,9 +4444,12 @@ CMDs[#CMDs + 1] = {NAME = 'oldconsole', DESC = 'Loads old Roblox console'}
 CMDs[#CMDs + 1] = {NAME = 'explorer / dex', DESC = 'Opens DEX by Moon'}
 CMDs[#CMDs + 1] = {NAME = 'secdex / secureddex', DESC = 'декс обход 80% игр ода'}
 CMDs[#CMDs + 1] = {NAME = 'olddex / odex', DESC = 'Opens Old DEX by Moon'}
+CMDs[#CMDs + 1] = {NAME = 'universeviewer', DESC = 'Universe Viewer by Me'}
+CMDs[#CMDs + 1] = {NAME = 'weldingabusescript', DESC = 'Прикрепляца к цели без задержки (если есть коллизия не багнутая и нетворка над собой)'}
 CMDs[#CMDs + 1] = {NAME = 'remotespy / rspy', DESC = 'Opens Simple Spy V3'}
 CMDs[#CMDs + 1] = {NAME = 'secrspy / securedremotespy', DESC = 'обход ремот спай 80% игр топ (Желательно запустить secureddex сначало для фулл обхода)'}
 CMDs[#CMDs + 1] = {NAME = 'audiologger / alogger', DESC = 'Opens Edges audio logger'}
+CMDs[#CMDs + 1] = {NAME = 'animationslogger / animlogger / animspy', DESC = 'аним айди спиздить да'}
 CMDs[#CMDs + 1] = {NAME = 'serverinfo / info', DESC = 'Gives you info about the server'}
 CMDs[#CMDs + 1] = {NAME = 'jobid', DESC = 'Copies the games JobId to your clipboard'}
 CMDs[#CMDs + 1] = {NAME = 'notifyjobid', DESC = 'Notifies you the games JobId'}
@@ -4607,6 +4610,8 @@ CMDs[#CMDs + 1] = {NAME = 'minzoom [num]', DESC = 'Minimum camera zoom'}
 CMDs[#CMDs + 1] = {NAME = 'camdistance [num]', DESC = 'Changes camera distance from your player'}
 CMDs[#CMDs + 1] = {NAME = 'fov [num]', DESC = 'Adjusts field of view (default is 70)'}
 CMDs[#CMDs + 1] = {NAME = 'fovhook [num]', DESC = 'Hooking field of view (May be detected)'}
+CMDs[#CMDs + 1] = {NAME = 'aspectratio / rastyag [num]', DESC = 'расстяг в роблахе (может детектица из-за хука)'}
+CMDs[#CMDs + 1] = {NAME = 'adonisbypass', DESC = 'абходыч'}
 CMDs[#CMDs + 1] = {NAME = 'fixcam / restorecam', DESC = 'Fixes camera'}
 CMDs[#CMDs + 1] = {NAME = 'enableshiftlock / enablesl', DESC = 'Enables the shift lock option'}
 CMDs[#CMDs + 1] = {NAME = 'lookat [player]', DESC = 'Moves your camera view to a player'}
@@ -4864,12 +4869,15 @@ CMDs[#CMDs + 1] = {NAME = 'unctrllock', DESC = 'Re-binds Shiftlock to LeftShift'
 CMDs[#CMDs + 1] = {NAME = 'listento [player]', DESC = 'Listens to the area around a player. Can also eavesdrop with vc'}
 CMDs[#CMDs + 1] = {NAME = 'unlistento', DESC = 'Disables listento'}
 CMDs[#CMDs + 1] = {NAME = 'jerk', DESC = 'Makes you jork it'}
+CMDs[#CMDs + 1] = {NAME = 'visualrope', DESC = 'чоо бусты спвк обход'}
+CMDs[#CMDs + 1] = {NAME = 'telekinesis', DESC = 'телекинез тул'}
 CMDs[#CMDs + 1] = {NAME = 'unsuspendchat', DESC = 'Unsuspends you from text chat'}
 CMDs[#CMDs + 1] = {NAME = 'unsuspendvc', DESC = 'Unsuspends you from voice chat'}
 CMDs[#CMDs + 1] = {NAME = 'muteallvcs', DESC = 'Mutes voice chat for all players'}
 CMDs[#CMDs + 1] = {NAME = 'unmuteallvcs', DESC = 'Unmutes voice chat for all players'}
 CMDs[#CMDs + 1] = {NAME = 'mutevc [player]', DESC = 'Mutes the voice chat of a player'}
 CMDs[#CMDs + 1] = {NAME = 'unmutevc [player]', DESC = 'Unmutes the voice chat of a player'}
+CMDs[#CMDs + 1] = {NAME = 'cleangc / cleargc', DESC = 'очищает память от мусора созданного режим в который ты ща играешь'}
 -- wait()
 
 for i = 1, #CMDs do
@@ -8637,6 +8645,198 @@ addcmd('fovhook',{},function(args, speaker)
 	end
 end)
 
+addcmd('aspectratio',{'rastyag'},function(args, speaker)
+    local valka = args[1] or 0.85
+    warn(valka, typeof(valka))
+	if isNumber(tonumber(valka)) then
+        
+    local succ, err = pcall(function()
+        if tonumber(valka) <= 0 then
+            warn(aga)
+            valka = 1
+        end
+    end)
+
+    local camera = workspace.CurrentCamera
+
+    getgenv().rastyag_settings = {
+        ["Aspect Ratio"] = true,
+        ["Ratio Value"] = valka
+    }
+
+    if getgenv().rastyag_enabled ~= nil then
+        return
+    end
+
+    getgenv().rastyag_enabled = true
+
+    local oldNewindex
+
+    oldNewindex = hookmetamethod(game, "__newindex", function(object, propertyName, propertyValue)
+        if object == camera and propertyName == "CFrame" then
+            if getgenv().rastyag_settings["Aspect Ratio"] then
+                propertyValue = propertyValue * CFrame.new(0, 0, 0, 1, 0, 0, 0, getgenv().rastyag_settings["Ratio Value"], 0, 0, 0, 1)
+            end
+        end
+        return oldNewindex(object, propertyName, propertyValue)
+    end)
+
+	end
+end)
+
+addcmd('adonisbypass',{},function(args, speaker)
+    notify("Loading", "Попытка обхода")
+    local getInfo = getinfo or debug.getinfo
+    local hookedFunctions = {}
+    local detectedFunc, killFunc
+
+    local oldth = getthreadidentity()
+    setthreadidentity(8)
+
+    for _, value in ipairs(getgc(true)) do
+        if typeof(value) == "table" then
+            local detected = rawget(value, "Detected")
+            local kill = rawget(value, "Kill")
+
+            if typeof(detected) == "function" and not detectedFunc then
+                detectedFunc = detected
+                hookfunction(detectedFunc, newcclosure(function(method, info, ...)
+                    return true
+                end))
+                table.insert(hookedFunctions, detectedFunc)
+            end
+
+            if rawget(value, "Variables")
+                and rawget(value, "Process")
+                and typeof(kill) == "function"
+                and not killFunc then
+                killFunc = kill
+                hookfunction(killFunc, newcclosure(function(info) end))
+                table.insert(hookedFunctions, killFunc)
+            end
+        end
+    end
+
+    local originalDebugInfo
+    originalDebugInfo = hookfunction(getrenv().debug.info, newcclosure(function(...)
+        local firstArg = ...
+        if detectedFunc and firstArg == detectedFunc then
+            return coroutine.yield(coroutine.running())
+        end
+        return originalDebugInfo(...)
+    end))
+
+    setthreadidentity(oldth)
+
+    task.spawn(function()
+        task.wait(1)
+
+        local coreTable = nil
+        local remoteTable = nil
+
+        for _, value in ipairs(getgc(true)) do
+            if typeof(value) == "table" then
+                local key = rawget(value, "Key")
+                local special = rawget(value, "Special")
+                local loadCode = rawget(value, "LoadCode")
+
+                if typeof(key) == "string"
+                    and typeof(special) == "string"
+                    and typeof(loadCode) == "function" then
+                    coreTable = value
+                    break
+                end
+            end
+        end
+
+        for _, v in ipairs(getinstances()) do
+            if v:IsA("RemoteFunction") and v.Name == "__FUNCTION" then
+                local cb = getcallbackvalue(v, "OnClientInvoke")
+                if cb then
+                    hookfunction(cb, newcclosure(function(...)
+                        local args = {...}
+                        for i, arg in ipairs(args) do
+                            warn("  arg", i, "=", tostring(arg), typeof(arg))
+                        end
+
+                        local ok, result = pcall(cb, ...)
+
+                        if ok then
+                            return result
+                        else
+                            local firstArg = args[1]
+
+                            if typeof(firstArg) == "string"
+                                and firstArg:find("GIVE_KEY") then
+                                return true
+                            end
+
+                            return true
+                        end
+                    end))
+                end
+            end
+        end
+    end)
+
+    task.spawn(function()
+        task.wait(1.5)
+
+        for _, value in ipairs(getgc(true)) do
+            if typeof(value) == "table" then
+                local returnables = rawget(value, "Returnables")
+                if typeof(returnables) == "table" then
+                    local ping = rawget(returnables, "Ping")
+                    if typeof(ping) == "function" then
+                        hookfunction(ping, newcclosure(function(...)
+                            local ok, result = pcall(ping, ...)
+                            if ok then return result end
+                            return true
+                        end))
+                    end
+
+                    local clientHooked = rawget(returnables, "ClientHooked")
+                    if typeof(clientHooked) == "function" then
+                        hookfunction(clientHooked, newcclosure(function(...)
+                            local ok, result = pcall(clientHooked, ...)
+                            if ok then return result end
+                            return true
+                        end))
+                    end
+                end
+            end
+        end
+    end)
+
+    task.spawn(function()
+        task.wait(2)
+        for _, v in ipairs(getinstances()) do
+            if v:IsA("RemoteFunction") then
+                local cb = getcallbackvalue(v, "OnClientInvoke")
+                if not cb then
+                    v.OnClientInvoke = newcclosure(function(...)
+                        return true
+                    end)
+                end
+            end
+        end
+    end)
+
+    game.DescendantAdded:Connect(function(v)
+        if v:IsA("RemoteFunction") then
+            task.wait(0.3)
+            local cb = getcallbackvalue(v, "OnClientInvoke")
+            if not cb then
+                v.OnClientInvoke = newcclosure(function(...)
+                    return true
+                end)
+            end
+        end
+    end)
+
+    notify("Loading", "Адонис успешно обойден!")
+end)
+
 local preMaxZoom = Players.LocalPlayer.CameraMaxZoomDistance
 local preMinZoom = Players.LocalPlayer.CameraMinZoomDistance
 addcmd('lookat',{},function(args, speaker)
@@ -10511,6 +10711,16 @@ addcmd("explorer", {"dex"}, function(args, speaker)
     loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))()
 end)
 
+addcmd("universeviewer", {}, function(args, speaker)
+    notify("Loading", "Hold on a sec")
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/Username11231/Scriptss/main/Scripts/UniverseViewer.lua"))()
+end)
+
+addcmd("weldingabusescript", {}, function(args, speaker)
+    notify("Loading", "Hold on a sec")
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/Username11231/Scriptss/main/Scripts/WeldingAbuseScript.lua"))()
+end)
+
 addcmd("secdex", {"secureddex"}, function(args, speaker)
     notify("Loading", "Hold on a sec")
     
@@ -11026,6 +11236,11 @@ end)
 addcmd('audiologger',{'alogger'},function(args, speaker)
 	notify("Loading",'Hold on a sec')
 	loadstring(game:HttpGet(('https://raw.githubusercontent.com/infyiff/backup/main/audiologger.lua'),true))()
+end)
+
+addcmd('animationslogger',{'animlogger', 'animspy'},function(args, speaker)
+	notify("Loading",'Hold on a sec')
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/17kShotsss/AnimationSpy/refs/heads/main/AnimationSpy.lua"))()
 end)
 
 local loopgoto = nil
@@ -13120,6 +13335,301 @@ addcmd("jerk", {}, function(args, speaker)
     end
 end)
 
+addcmd("visualrope", {}, function(args, speaker)
+    local humanoid = speaker.Character:FindFirstChildWhichIsA("Humanoid")
+    local backpack = speaker:FindFirstChildWhichIsA("Backpack")
+    if not humanoid or not backpack then return end
+
+    local visualropecons = {}
+
+    local tool = Instance.new("Tool")
+    tool.Name = "Верёвка"
+    tool.RequiresHandle = false
+    tool.CanBeDropped = false
+
+    local playerForRopeXD = game.Players.LocalPlayer
+    local characterForRopeXD = playerForRopeXD.Character or playerForRopeXD.CharacterAdded:Wait()
+    local humanoidRootPartForRopeXD = characterForRopeXD:WaitForChild("HumanoidRootPart")
+
+    local currentRope = nil
+    local currentAttachment = nil
+    local isAttached = false
+    local isProcessing = false
+    local currentSession = 0
+    local originalLegProperties = {}
+
+    local function GetNetworkDelayForRopeXD()
+        local ping = 0
+        pcall(function() ping = playerForRopeXD:GetNetworkPing() end)
+        
+        if ping <= 0 then
+            pcall(function()
+                ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
+            end)
+        end
+        
+        if ping <= 0 then ping = 0.1 end
+        
+        local serverProcessing = math.random(15, 50) / 1000
+        return ping + serverProcessing
+    end
+
+    local function SetLegsHeavyForRopeXD(heavy)
+        if heavy then
+            for _, part in ipairs(characterForRopeXD:GetChildren()) do
+                if part:IsA("BasePart") and (part.Name:match("Leg") or part.Name:match("Foot")) then
+                    originalLegProperties[part] = part.CustomPhysicalProperties
+                    local currentPhys = part.CurrentPhysicalProperties
+                    if currentPhys then
+                        part.CustomPhysicalProperties = PhysicalProperties.new(3, currentPhys.Friction, currentPhys.Elasticity, currentPhys.FrictionWeight, currentPhys.ElasticityWeight)
+                    else
+                        part.CustomPhysicalProperties = PhysicalProperties.new(3, 0.3, 0.5)
+                    end
+                end
+            end
+        else
+            for part, origProps in pairs(originalLegProperties) do
+                if part and part.Parent then
+                    part.CustomPhysicalProperties = origProps
+                end
+            end
+            originalLegProperties = {}
+        end
+    end
+
+    local function createRopeBOOSTXD(hitPart, hitPosition)
+        if currentRope then
+            currentRope:Destroy()
+            currentRope = nil
+        end
+        if currentAttachment then
+            currentAttachment:Destroy()
+            currentAttachment = nil
+        end
+        if isAttached then
+            SetLegsHeavyForRopeXD(false)
+            isAttached = false
+        end
+
+        local torsoAttachment = Instance.new("Attachment")
+        torsoAttachment.Parent = humanoidRootPartForRopeXD
+        torsoAttachment.Position = Vector3.new(0, 0, 0)
+
+        local targetAttachment = Instance.new("Attachment")
+        targetAttachment.Parent = hitPart
+        targetAttachment.WorldPosition = hitPosition
+
+        local rope = Instance.new("RopeConstraint")
+        rope.Parent = characterForRopeXD
+        rope.Attachment0 = torsoAttachment
+        rope.Attachment1 = targetAttachment
+        rope.Visible = true
+        rope.Thickness = 0.1
+        rope.Color = BrickColor.new("Brown")
+        rope.Length = (humanoidRootPartForRopeXD.Position - hitPosition).Magnitude
+        
+        if characterForRopeXD:FindFirstChildOfClass('Humanoid') then
+            if characterForRopeXD:FindFirstChildOfClass('Humanoid').MoveDirection.Magnitude > 0 then
+            
+
+            if hitPosition.Y < humanoidRootPartForRopeXD.Position.Y then
+                rope.WinchEnabled = true
+                rope.WinchForce = 33000
+                rope.WinchResponsiveness = 105
+                rope.WinchSpeed = 100
+                characterForRopeXD:FindFirstChildOfClass('Humanoid').UseJumpPower = true
+                characterForRopeXD:FindFirstChildOfClass('Humanoid').JumpPower = 50
+            end
+
+
+            end
+        end
+
+        currentRope = rope
+        currentAttachment = targetAttachment
+        isAttached = true
+        SetLegsHeavyForRopeXD(true)
+    end
+
+    local function CheckIfIsNotPlayerRopeBoostXDDD(A)
+        for i,v in next, game.Players:GetPlayers() do
+            if v.Character ~= nil then
+                local Char = v.Character
+                if A:IsDescendantOf(Char) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function onActivatedRopeBoostXDDD()
+        if isProcessing then return end
+
+        local delayTime = GetNetworkDelayForRopeXD()
+
+        if isAttached then
+            isProcessing = true
+            task.delay(delayTime, function()
+                isProcessing = false
+                
+                    if currentRope then
+                        currentRope:Destroy()
+                        currentRope = nil
+                    end
+                    if currentAttachment then
+                        currentAttachment:Destroy()
+                        currentAttachment = nil
+                    end
+                    if isAttached then
+                        SetLegsHeavyForRopeXD(false)
+                        isAttached = false
+                    end
+
+            end)
+            return
+        end
+
+        local mouse = playerForRopeXD:GetMouse()
+        local camera = workspace.CurrentCamera
+        
+        local rayOrigin
+        local rayDirection
+        
+        if game:GetService("UserInputService").TouchEnabled and not game:GetService("UserInputService").KeyboardEnabled then
+            rayOrigin = camera.CFrame.Position
+            rayDirection = camera.CFrame.LookVector * 500
+        else
+            rayOrigin = camera.CFrame.Position
+            rayDirection = (mouse.Hit.Position - rayOrigin).Unit * 500
+        end
+
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        raycastParams.FilterDescendantsInstances = {characterForRopeXD}
+
+        local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+
+        if raycastResult and raycastResult.Instance and not raycastResult.Instance:FindFirstAncestorWhichIsA('Humanoid') and not CheckIfIsNotPlayerRopeBoostXDDD(raycastResult.Instance) then
+            local hitPart = raycastResult.Instance
+            local hitPosition = raycastResult.Position
+            
+            isProcessing = true
+            currentSession = currentSession + 1
+            local sessionID = currentSession
+            
+            task.delay(delayTime, function()
+                isProcessing = false
+                if sessionID == currentSession and tool.Parent == characterForRopeXD then
+                    createRopeBOOSTXD(hitPart, hitPosition)
+                end
+            end)
+        end
+    end
+
+    table.insert(
+    visualropecons,
+    tool.Activated:Connect(onActivatedRopeBoostXDDD)
+    )
+
+    table.insert(
+    visualropecons,
+    tool.Activated:Connect(onActivatedRopeBoostXDDD)
+    )
+
+    local pcon = playerForRopeXD.Character.ChildRemoved:Connect(function(child)
+        if child == tool then
+            if isAttached then
+                currentSession = currentSession + 1
+                local sessionID = currentSession
+                local delayTime = GetNetworkDelayForRopeXD()
+                
+                task.delay(delayTime, function()
+                    if sessionID == currentSession then
+                        
+                        if currentRope then
+                            currentRope:Destroy()
+                            currentRope = nil
+                        end
+                        if currentAttachment then
+                            currentAttachment:Destroy()
+                            currentAttachment = nil
+                        end
+                        if isAttached then
+                            SetLegsHeavyForRopeXD(false)
+                            isAttached = false
+                        end
+
+                    end
+                end)
+            end
+        end
+    end)
+
+    table.insert(
+    visualropecons,
+    pcon
+    )
+
+    local xdconrem = tool.AncestryChanged:Connect(function(a, p)
+        if p == nil or a == nil then
+            for i,v in next, visualropecons do
+                v:Disconnect()
+                v = nil
+            end
+            pcall(function()
+                GetNetworkDelayForRopeXD = nil
+                SetLegsHeavyForRopeXD = nil
+                createRopeBOOSTXD = nil
+                onActivatedRopeBoostXDDD = nil
+                CheckIfIsNotPlayerRopeBoostXDDD = nil
+            end)
+        end
+    end)
+
+    table.insert(
+    visualropecons,
+    xdconrem
+    )
+
+    tool.Parent = playerForRopeXD.Backpack
+
+    if getgenv().aropehook ~= nil and getgenv().aropehook == true then
+        return
+    end
+
+    local old
+    old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        
+        if method == "AdjustSpeed" then
+            local success, isAnim = pcall(function()
+                return self:IsA("AnimationTrack")
+            end)
+            
+            if success and isAnim then
+                local name = self.Name:lower()
+                if string.find(name, "run") or string.find(name, "walk") then
+                    return old(self, 1)
+                end
+            end
+        end
+        
+        return old(self, ...)
+    end))
+
+    getgenv().aropehook = true
+
+end)
+
+addcmd("telekinesis", {}, function(args, speaker)
+    local humanoid = speaker.Character:FindFirstChildWhichIsA("Humanoid")
+    local backpack = speaker:FindFirstChildWhichIsA("Backpack")
+    if not humanoid or not backpack then return end
+    
+    loadstring(game:HttpGet(('https://raw.githubusercontent.com/SAZXHUB/Control-update/main/README.md'),true))()
+end)
+
 addcmd("guiscale", {}, function(args, speaker)
     if args[1] and isNumber(args[1]) then
         local scale = tonumber(args[1])
@@ -13182,6 +13692,90 @@ addcmd("unmutevc", {}, function(args, speaker)
         if Players[plr] == speaker then continue end
         Services.VoiceChatInternal:SubscribePause(Players[plr].UserId, false)
     end
+end)
+
+addcmd("cleangc", {"cleargc"}, function(args, speaker)
+    
+    local howmuchgccleaned = 0
+
+    for i,v in next, getnilinstances() do
+        if v ~= nil and typeof(v) == 'Instance' and v.Parent == nil then
+            
+            pcall(function()
+                cache.invalidate(v)
+            end)
+            
+            xpcall(function()
+                cache.invalidate(v)
+            end, function()
+                cache.invalidate(v)
+            end)
+
+            howmuchgccleaned += 1
+
+        elseif v ~= nil and typeof(v) ~= 'Instance' then
+
+            pcall(function()
+                cache.invalidate(v)
+            end)
+            
+            xpcall(function()
+                cache.invalidate(v)
+            end, function()
+               cache.invalidate(v)
+            end)
+
+        end
+    end
+
+    local scriptsforclean = getloadedmodules()
+        for _, s in next, scriptsforclean do
+            pcall(function()
+                if not s or not s.Parent then return end
+                local env = getsenv(s)
+                if not env then return end
+                for k, v in next, env do
+                    if typeof(v) == "Instance" and v.Parent == nil and not destroyed[v] then
+                        destroyed[v] = true
+                        pcall(cache.invalidate, v)
+                        pcall(function() v:Destroy() end)
+                        pcall(function() env[k] = nil end)
+                        howmuchgccleaned += 1
+                    end
+                end
+            end)
+        end
+
+        local scriptsforclean2 = getrunningscripts()
+        for _, s in next, scriptsforclean2 do
+            pcall(function()
+                if not s or not s.Parent then return end
+                local env = getsenv(s)
+                if not env then return end
+                for k, v in next, env do
+                    if typeof(v) == "Instance" and v.Parent == nil and not destroyed[v] then
+                        destroyed[v] = true
+                        pcall(cache.invalidate, v)
+                        pcall(function() v:Destroy() end)
+                        pcall(function() env[k] = nil end)
+                        howmuchgccleaned += 1
+                    end
+                end
+            end)
+        end
+
+        local reg = getreg()
+        for i, v in next, reg do
+            if typeof(v) == "Instance" and v.Parent == nil and not destroyed[v] then
+                destroyed[v] = true
+                pcall(cache.invalidate, v)
+                pcall(function() v:Destroy() end)
+                howmuchgccleaned += 1
+            end
+        end
+
+    notify("Notification", "Память режима очищена. Удалено: " .. tostring(howmuchgccleaned) .. " объектов")
+
 end)
 
 addcmd("permadeath", {}, function(args, speaker)
@@ -13628,102 +14222,6 @@ CaptureService.CaptureEnded:Connect(function()
     task.delay(0.1, function()
         PARENT.Enabled = true
     end)
-end)
-
-task.spawn(function()
-	local success, latestVersionInfo = pcall(function() 
-		local versionJson = game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/version")
-		return HttpService:JSONDecode(versionJson)
-	end)
-
-	if success then
-		if currentVersion ~= latestVersionInfo.Version then
-			notify("Outdated", "Get the new version at infyiff.github.io")
-		end
-
-		if latestVersionInfo.Announcement and latestVersionInfo.Announcement ~= "" then
-			local AnnGUI = Instance.new("Frame")
-			local background = Instance.new("Frame")
-			local TextBox = Instance.new("TextLabel")
-			local shadow = Instance.new("Frame")
-			local PopupText = Instance.new("TextLabel")
-			local Exit = Instance.new("TextButton")
-			local ExitImage = Instance.new("ImageLabel")
-
-			AnnGUI.Name = randomString()
-			AnnGUI.Parent = ScaledHolder
-			AnnGUI.Active = true
-			AnnGUI.BackgroundTransparency = 1
-			AnnGUI.Position = UDim2.new(0.5, -180, 0, -500)
-			AnnGUI.Size = UDim2.new(0, 360, 0, 20)
-			AnnGUI.ZIndex = 10
-
-			background.Name = "background"
-			background.Parent = AnnGUI
-			background.Active = true
-			background.BackgroundColor3 = currentShade1
-			background.BorderSizePixel = 0
-			background.Position = UDim2.new(0, 0, 0, 20)
-			background.Size = UDim2.new(0, 360, 0, 150)
-			background.ZIndex = 10
-
-			TextBox.Parent = background
-			TextBox.BackgroundTransparency = 1
-			TextBox.Position = UDim2.new(0, 5, 0, 5)
-			TextBox.Size = UDim2.new(0, 350, 0, 140)
-			TextBox.Font = Enum.Font.SourceSans
-			TextBox.TextSize = 18
-			TextBox.TextWrapped = true
-			TextBox.Text = latestVersionInfo.Announcement
-			TextBox.TextColor3 = currentText1
-			TextBox.TextXAlignment = Enum.TextXAlignment.Left
-			TextBox.TextYAlignment = Enum.TextYAlignment.Top
-			TextBox.ZIndex = 10
-
-			shadow.Name = "shadow"
-			shadow.Parent = AnnGUI
-			shadow.BackgroundColor3 = currentShade2
-			shadow.BorderSizePixel = 0
-			shadow.Size = UDim2.new(0, 360, 0, 20)
-			shadow.ZIndex = 10
-
-			PopupText.Name = "PopupText"
-			PopupText.Parent = shadow
-			PopupText.BackgroundTransparency = 1
-			PopupText.Size = UDim2.new(1, 0, 0.95, 0)
-			PopupText.ZIndex = 10
-			PopupText.Font = Enum.Font.SourceSans
-			PopupText.TextSize = 14
-			PopupText.Text = "Server Announcement"
-			PopupText.TextColor3 = currentText1
-			PopupText.TextWrapped = true
-
-			Exit.Name = "Exit"
-			Exit.Parent = shadow
-			Exit.BackgroundTransparency = 1
-			Exit.Position = UDim2.new(1, -20, 0, 0)
-			Exit.Size = UDim2.new(0, 20, 0, 20)
-			Exit.Text = ""
-			Exit.ZIndex = 10
-
-			ExitImage.Parent = Exit
-			ExitImage.BackgroundColor3 = Color3.new(1, 1, 1)
-			ExitImage.BackgroundTransparency = 1
-			ExitImage.Position = UDim2.new(0, 5, 0, 5)
-			ExitImage.Size = UDim2.new(0, 10, 0, 10)
-			ExitImage.Image = getcustomasset("infiniteyield/assets/close.png")
-			ExitImage.ZIndex = 10
-
-			wait(1)
-			AnnGUI:TweenPosition(UDim2.new(0.5, -180, 0, 150), "InOut", "Quart", 0.5, true, nil)
-
-			Exit.MouseButton1Click:Connect(function()
-				AnnGUI:TweenPosition(UDim2.new(0.5, -180, 0, -500), "InOut", "Quart", 0.5, true, nil)
-				wait(0.6)
-				AnnGUI:Destroy()
-			end)
-		end
-	end
 end)
 
 task.spawn(function()
