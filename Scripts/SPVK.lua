@@ -6,8 +6,8 @@ LocalPlayerId = game:GetService("Players"):GetUserIdFromNameAsync(LocalPlayerId)
 
 
 local window = Fluent:CreateWindow({
-        Title = 'SPVK HUB v0.0.5',
-        SubTitle = "(фиксы)",
+        Title = 'SPVK HUB v0.0.6',
+        SubTitle = "(новые фичи)",
         TabWidth = 160,
         Size = UDim2.fromOffset(580, 460),
         Acrylic = true,
@@ -27,7 +27,11 @@ local Tabs = {
 
 local Options = Fluent.Options
 
-local FUNCTIONS = {
+local Stats = game:GetService("Stats")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local FUNCTIONS = {}
+FUNCTIONS = {
 
         test = function() print(123) end,
 
@@ -45,6 +49,40 @@ local FUNCTIONS = {
                 Target:PivotTo(OurPos)
         end,
 
+
+    getPing = function(samples)
+        samples = samples or 5
+        local sum = 0
+        local count = 0
+        for i = 1, samples do
+            local ok, ms = pcall(function()
+                return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+            end)
+            if ok and ms then
+                sum = sum + ms
+                count = count + 1
+            end
+            RunService.Heartbeat:Wait()
+        end
+        if count > 0 then
+            return (sum / count) / 1000
+        end
+        return 0.1
+    end,
+
+        measureRoundTrip = function(remote)
+            local t0 = os.clock()
+            pcall(function()
+                game:GetService("ReplicatedStorage").Remotes.Throwable:InvokeServer()
+            end)
+            return os.clock() - t0
+        end,
+
+        waitForServer = function()
+            local waitTime
+            waitTime = FUNCTIONS.measureRoundTrip(remote) * 1.5
+            task.wait(math.max(waitTime, 0.03))
+        end
 }
 
 _G.RagdollTimerEnabled = false
@@ -669,6 +707,7 @@ AntiDangerPartsButton:OnChanged(function()
         end
 end)
 
+
 Tabs.TradeTab:AddParagraph({
         Title = "Блоки трейда",
         Content = ""
@@ -688,7 +727,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(142.422531, 2050.04907, 127.88311, -0.668970048, 3.59919849e-09, -0.743288875, 4.84288378e-08, 1, -4.84287739e-08, 0.743291557, 6.83940371e-08, -0.668969691)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -706,7 +750,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(158.627472, 2050.72412, 143.999985, 0.698014498, 2.69277461e-10, 0.716085136, -1.86264693e-08, 1, 1.86264622e-08, -0.71608603, 2.10717204e-08, 0.698014379)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -724,7 +773,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(-156.7, 2049.34912, 192.076538, 0.0228189826, 0, 0.999739647, 0, 1, 0, -0.999739647, 0, 0.0228189826)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -742,7 +796,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(-179.953842, 2049.84912, 192.11087, 0.0013421505, -4.83637237e-08, 0.999999106, 4.84288591e-08, 1, -4.84287881e-08, -1.00000203, -4.84938312e-08, 0.0013429235)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -760,7 +819,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(-234.038635, 2049.22412, 245.946762, -0.00767621491, 0, -0.999970496, -3.7252903e-09, 1, 3.7252903e-09, 0.999970615, 0, -0.00767624378)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -778,7 +842,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(-211.090363, 2049.84912, 245.986923, -0.0190743208, 0, 0.999818027, 0, 1, 0, -0.999818027, 0, -0.0190743208)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -796,7 +865,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(-219.4229736328125, 2098.349609375, 213.3)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -814,7 +888,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(-241.8, 2098.34912, 212.857391, 0.000854432583, 0, 0.999999702, 0, 1, 0, -0.999999702, 0, 0.000854432583)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -832,7 +911,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(153.699951, 2022.47449, -84.7629395, 0.971885681, 0, 0.235453948, -3.7252903e-09, 1, 3.7252903e-09, -0.235454008, 0, 0.971885562)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -850,7 +934,12 @@ Tabs.TradeTab:AddButton({
                         CFrame.new(149.745255, 2022.47449, -107.466614, -0.985789359, 0, -0.167986825, -3.7252903e-09, 1, 3.7252903e-09, 0.16798687, 0, -0.985789239)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
-
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -1022,6 +1111,12 @@ Tabs.OtherTab:AddButton({
                         humanoidRootPart.CFrame + Vector3.new(0, -2.7, 0)
                 }
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
         end
 })
 
@@ -1035,6 +1130,67 @@ Tabs.OtherTab:AddButton({
                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
         end
 })
+
+local isSignSignatureEnabled = function()
+    local returnable_value = false
+    if workspace:FindFirstChild(game:GetService("Players").LocalPlayer.Name.."'s Sign") and workspace:FindFirstChild(game:GetService("Players").LocalPlayer.Name.."'s Sign"):FindFirstChild('Sign'):FindFirstChild('SurfaceGui'):FindFirstChild('Signature').Visible == true then
+        returnable_value = true
+    else
+        returnable_value = false
+    end
+    return returnable_value
+end
+
+local ToggleSignSignatureEnabled = function()
+    if game:GetService("Players").LocalPlayer.PlayerGui.UI.SignFrame.SignatureToggle.TextButton.TextLabel.Visible == true then
+        local args = {
+            buffer.fromstring("\003")
+        }
+        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+        game:GetService("Players").LocalPlayer.PlayerGui.UI.SignFrame.SignatureToggle.TextButton.TextLabel.Visible = false
+    else
+        local args = {
+            buffer.fromstring("\003")
+        }
+        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+        game:GetService("Players").LocalPlayer.PlayerGui.UI.SignFrame.SignatureToggle.TextButton.TextLabel.Visible = true
+    end
+end
+
+local SetSignSignatureEnabled = function(Value)
+    if Value == false and game:GetService("Players").LocalPlayer.PlayerGui.UI.SignFrame.SignatureToggle.TextButton.TextLabel.Visible == true then
+        local args = {
+            buffer.fromstring("\003")
+        }
+        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+        game:GetService("Players").LocalPlayer.PlayerGui.UI.SignFrame.SignatureToggle.TextButton.TextLabel.Visible = false
+    elseif Value == true and game:GetService("Players").LocalPlayer.PlayerGui.UI.SignFrame.SignatureToggle.TextButton.TextLabel.Visible == false then
+        local args = {
+            buffer.fromstring("\003")
+        }
+        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+        game:GetService("Players").LocalPlayer.PlayerGui.UI.SignFrame.SignatureToggle.TextButton.TextLabel.Visible = true
+    end
+end
+
+local HideSignName = Tabs.OtherTab:AddToggle("HideSignName", {Title = "Авто-скрытие ника на табличке (для тролинга)", Default = false})
+HideSignName:OnChanged(function()
+        HideSignNameToggle = Options.HideSignName.Value
+
+        if HideSignNameToggle == true then
+            if isSignSignatureEnabled() == true then
+                SetSignSignatureEnabled(false)
+            end
+        else
+            if not isSignSignatureEnabled() then
+                SetSignSignatureEnabled(true)
+            end
+        end
+end)
 
 local HitboxShow = Tabs.OtherTab:AddToggle("HitboxShow", {Title = "Показывать хитбокса удара", Default = false})
 
@@ -1050,8 +1206,8 @@ HitboxShow:OnChanged(function()
                                         continue 
                                 end
 
-                                if LocalPlayer.Character ~= nil and LocalPlayer.Character:FindFirstChild('Hitbox') then
-                                        LocalPlayer.Character:FindFirstChild('Hitbox').Transparency = 0.4
+                                if LocalPlayer.Character ~= nil and LocalPlayer.Character:FindFirstChild('_KHitbox') then
+                                        LocalPlayer.Character:FindFirstChild('_KHitbox').Transparency = 0.4
                                 end
 
                                 if LocalPlayer.Character ~= nil and LocalPlayer.Character:FindFirstChildOfClass('Tool') and LocalPlayer.Character:FindFirstChildOfClass('Tool'):FindFirstChild('Hitbox') then
@@ -1061,8 +1217,8 @@ HitboxShow:OnChanged(function()
                         end
 
         else
-                  if LocalPlayer.Character ~= nil and LocalPlayer.Character:FindFirstChild('Hitbox') then
-                        LocalPlayer.Character:FindFirstChild('Hitbox').Transparency = 1
+                  if LocalPlayer.Character ~= nil and LocalPlayer.Character:FindFirstChild('_KHitbox') then
+                        LocalPlayer.Character:FindFirstChild('_KHitbox').Transparency = 1
                 end
 
                 if LocalPlayer.Character ~= nil and LocalPlayer.Character:FindFirstChildOfClass('Tool') and LocalPlayer.Character:FindFirstChildOfClass('Tool'):FindFirstChild('Hitbox') then
@@ -1108,7 +1264,7 @@ Tabs.OtherTab:AddButton({
         Description = "Открывает менюшку крафта",
         Callback = function()
                 if LocalPlayer.Character ~= nil then
-                        game:GetService("Players").LocalPlayer.PlayerGui.UI.CraftFrame.Visible = true
+                    game:GetService("Players").LocalPlayer.PlayerGui.UI.CraftFrame.Visible = true
                 end
         end
 })
@@ -3398,6 +3554,151 @@ Tabs.TrollTab:AddButton({
     end
 })
 
+Tabs.TrollTab:AddParagraph({
+        Title = "Хезе чота новое",
+        Content = ""
+})
+
+Tabs.TrollTab:AddButton({
+        Title = "Заблокать крафт таблой",
+        Description = "Заблокает крафт таблой да",
+        Callback = function()
+                local args = {
+                        buffer.fromstring('\002'),
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+                  local args = {
+                        buffer.fromstring('\000'),
+                        CFrame.new(55.375, 2051.9248, 49.25, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
+        end
+})
+
+Tabs.TrollTab:AddButton({
+        Title = "Заблокать унитаз таблой",
+        Description = "по рофлу блокает унитаз таблой, выбраться можно но не так легко",
+        Callback = function()
+                 local args = {
+                        buffer.fromstring('\002'),
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+                  local args = {
+                        buffer.fromstring('\000'),
+                        CFrame.new(54.5, 2052.55, 27.7, 0, 0, 1, 0, 30, 31.5, 1.5, 0, 0)
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
+        end
+})
+
+Tabs.TrollTab:AddButton({
+        Title = "Заблокать вход в канашку 1",
+        Description = "Блокает выход из канашки возле КОСТРА",
+        Callback = function()
+                  local args = {
+                        buffer.fromstring('\002'),
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+                  local args = {
+                        buffer.fromstring('\000'),
+                        CFrame.new(-84.35, 2038, 84.65, 0, 0, 1, 0, 30, 31.5, 1.5, 0, 0)
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
+        end
+})
+
+Tabs.TrollTab:AddButton({
+        Title = "Заблокать вход в канашку 2",
+        Description = "Блокает выход из канашки возле МОГИЛ",
+        Callback = function()
+                   local args = {
+                        buffer.fromstring('\002'),
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+                  local args = {
+                        buffer.fromstring('\000'),
+                        CFrame.new(-147.49179077148438, 2040, -83, 0, 0, 1, 0, 30, 31.5, 1.5, 0, 0)
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
+        end
+})
+
+Tabs.TrollTab:AddButton({
+        Title = "Заблокать вход в канашку 3",
+        Description = "Блокает выход из канашки возле КВАРТИР ЗА РЕЧКОЙ",
+        Callback = function()
+                   local args = {
+                        buffer.fromstring('\002'),
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+                local args = {
+                    buffer.fromstring('\000'),
+                    CFrame.new(-197.2178955078125, 2039, 226.5, 0, 0, 1, 0, 30, 31.5, 1.5, 0, 0)
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
+        end
+})
+
+
+Tabs.TrollTab:AddButton({
+        Title = "Заблокать поджёг факела на костре",
+        Description = "Таблой не дает поджечь факел на костре",
+        Callback = function()
+                   local args = {
+                        buffer.fromstring('\002'),
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+
+                local args = {
+                    buffer.fromstring('\000'),
+                    CFrame.new(-74.8933334, 2049.74976, 105.579163, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                if HideSignNameToggle == true then
+                    local args = {
+                        buffer.fromstring('\003'),
+                    }
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SignManager"):InvokeServer(unpack(args))
+                end
+        end
+})
 
 local PVPEnablerBind = Tabs.BindsTab:AddKeybind("PVPEnablerBind", {
     Title = "Бинд для врубания/вырубания пвп",
