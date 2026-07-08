@@ -56,8 +56,8 @@ end
 
 
 local window = Fluent:CreateWindow({
-    Title = "Residence Massacre",
-    SubTitle = "by N&C",
+    Title = "Residence Massacre by N&C",
+    SubTitle = "v0.0.1",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -184,6 +184,35 @@ InfiniteSprint:OnChanged(function()
    end
 end)
 
+local ThirdPersonLoop = Tabs.MainTab:AddToggle("ThirdPersonLoop", {Title = "Третье лицо луп", Default = false })
+
+ThirdPersonLoop:OnChanged(function()
+    ThirdPersonLoopEnabled = Options.ThirdPersonLoop.Value
+        while ThirdPersonLoopEnabled do
+			if ThirdPersonLoopEnabled == true then
+				game.Players.LocalPlayer.CameraMode = Enum.CameraMode.Classic
+			else
+				break
+			end
+            task.wait()
+        end
+end)
+
+local AutoVoteSkipNight = Tabs.MainTab:AddToggle("AutoVoteSkipNight", {Title = "Авто-голос за скип ночи", Default = false })
+
+AutoVoteSkipNight:OnChanged(function()
+    AutoVoteSkipNightEnabled = Options.AutoVoteSkipNight.Value
+        while AutoVoteSkipNightEnabled do
+			if AutoVoteSkipNightEnabled == false then
+				break
+			end
+			if AutoVoteSkipNightEnabled == true and workspace:FindFirstChild('BedSkip') and workspace:FindFirstChild('BedSkip'):FindFirstChild('ClickDetector') and workspace:FindFirstChild('BedSkip'):FindFirstChild('ClickDetector').MaxActivationDistance > 0 then
+				fireclickdetector(workspace.BedSkip.ClickDetector)
+			end
+            task.wait()
+        end
+end)
+
 local MutantESP = Tabs.MainTab:AddToggle("MutantESP", {Title = "Подсветка монстра", Default = false })
 
 MutantESP:OnChanged(function()
@@ -281,7 +310,13 @@ loopfb:OnChanged(function()
 		    Lighting.FogEnd = 100000
 		    Lighting.GlobalShadows = false
 		    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
-            task.wait()
+            Lighting.FogEnd = 100000
+			for i,v in pairs(Lighting:GetChildren()) do
+				if v:IsA("Atmosphere") then
+					v:Destroy()
+				end
+			end
+			task.wait()
         end
 
    end
@@ -340,7 +375,7 @@ local Slider = Tabs.MainTab:AddSlider("SpeedSliderOK", {
         Rounding = 1,
         Callback = function(value)
         if AntiCheatBypassed then
-
+			GWalkSpeed = tonumber(value) >= 0 and tonumber(value) or 16
             game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = value
 
         else
@@ -365,6 +400,7 @@ local Slider = Tabs.MainTab:AddSlider("SpeedSliderOK", {
         Rounding = 1,
         Callback = function(value)
         if tonumber(value) > 50 and AntiCheatBypassed then
+			GJumpPower = tonumber(value) >= 0 and tonumber(value) or 50
             game.Players.LocalPlayer.Character.Humanoid.UseJumpPower = true
             game.Players.LocalPlayer.Character.Humanoid.JumpPower = value
 
@@ -381,6 +417,57 @@ local Slider = Tabs.MainTab:AddSlider("SpeedSliderOK", {
         end
     })
 
+	local FovSliderSlider = Tabs.MainTab:AddSlider("FovSliderOK", {
+		Title = "Хукнуть фов",
+		Description = "",
+		Default = 70,
+		Min = 30,
+		Max = 120,
+		Rounding = 1,
+		Callback = function(fov)
+			if not AntiCheatBypassed then
+				Fluent:Notify({ Title = "ERROR", Content = "Обойди сначала", SubContent = "", Duration = 1 })
+				return
+			end
+			local n = tonumber(fov)
+			if not n then return end
+
+			local G = getgenv()
+			G.hooked_fov11 = n
+			G.fov_lock_enabled = true
+
+			local RunService = game:GetService("RunService")
+
+			-- вернуть наш FOV, если кто-то его изменил
+			local function apply()
+				local c = workspace.CurrentCamera
+				if c and G.fov_lock_enabled and G.hooked_fov11 and c.FieldOfView ~= G.hooked_fov11 then
+					c.FieldOfView = G.hooked_fov11
+				end
+			end
+
+			-- (пере)подписка на изменение FOV текущей камеры
+			local function bindCam()
+				if G.fovPropConn then G.fovPropConn:Disconnect() end
+				local c = workspace.CurrentCamera
+				if not c then return end
+				c.FieldOfView = G.hooked_fov11
+				G.fovPropConn = c:GetPropertyChangedSignal("FieldOfView"):Connect(apply)
+			end
+
+			-- вешаем инфраструктуру один раз
+			if not G.fov_lock_bool then
+				G.fov_lock_bool = true
+				-- смена камеры игрой -> переподписываемся на новую
+				G.fovCamConn = workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCam)
+				-- страховка каждый кадр после апдейта камеры
+				pcall(function() RunService:UnbindFromRenderStep("FovLock11") end)
+				RunService:BindToRenderStep("FovLock11", Enum.RenderPriority.Camera.Value + 1, apply)
+			end
+
+			bindCam()
+		end
+	})
 
     Tabs.HubsTab:AddButton({
     Title = "Infinite Yield",
@@ -389,3 +476,11 @@ local Slider = Tabs.MainTab:AddSlider("SpeedSliderOK", {
         loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
     end
 })
+
+game:GetService("RunService").RenderStepped:Connect(function()
+	if AntiCheatBypassed then
+		game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = GWalkSpeed or 16
+		game.Players.LocalPlayer.Character.Humanoid.UseJumpPower = true
+		game.Players.LocalPlayer.Character.Humanoid.JumpPower = GJumpPower or 50
+	end
+end)
