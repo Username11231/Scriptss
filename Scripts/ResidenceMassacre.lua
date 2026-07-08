@@ -57,7 +57,7 @@ end
 
 local window = Fluent:CreateWindow({
     Title = "Residence Massacre by N&C",
-    SubTitle = "v0.0.1",
+    SubTitle = "v0.0.2",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -193,21 +193,6 @@ ThirdPersonLoop:OnChanged(function()
 				game.Players.LocalPlayer.CameraMode = Enum.CameraMode.Classic
 			else
 				break
-			end
-            task.wait()
-        end
-end)
-
-local AutoVoteSkipNight = Tabs.MainTab:AddToggle("AutoVoteSkipNight", {Title = "Авто-голос за скип ночи", Default = false })
-
-AutoVoteSkipNight:OnChanged(function()
-    AutoVoteSkipNightEnabled = Options.AutoVoteSkipNight.Value
-        while AutoVoteSkipNightEnabled do
-			if AutoVoteSkipNightEnabled == false then
-				break
-			end
-			if AutoVoteSkipNightEnabled == true and workspace:FindFirstChild('BedSkip') and workspace:FindFirstChild('BedSkip'):FindFirstChild('ClickDetector') and workspace:FindFirstChild('BedSkip'):FindFirstChild('ClickDetector').MaxActivationDistance > 0 then
-				fireclickdetector(workspace.BedSkip.ClickDetector)
 			end
             task.wait()
         end
@@ -429,43 +414,59 @@ local Slider = Tabs.MainTab:AddSlider("SpeedSliderOK", {
 				Fluent:Notify({ Title = "ERROR", Content = "Обойди сначала", SubContent = "", Duration = 1 })
 				return
 			end
+			
 			local n = tonumber(fov)
 			if not n then return end
-
-			local G = getgenv()
-			G.hooked_fov11 = n
-			G.fov_lock_enabled = true
-
-			local RunService = game:GetService("RunService")
-
-			-- вернуть наш FOV, если кто-то его изменил
-			local function apply()
-				local c = workspace.CurrentCamera
-				if c and G.fov_lock_enabled and G.hooked_fov11 and c.FieldOfView ~= G.hooked_fov11 then
-					c.FieldOfView = G.hooked_fov11
+			
+			getgenv().hooked_fov11 = n
+			getgenv().fov_block    = true
+			
+			local cam = workspace.CurrentCamera
+			if cam then cam.FieldOfView = n end
+			
+			if getgenv().__fovHooked then return end
+			getgenv().__fovHooked = true
+			
+			local TweenService = game:GetService("TweenService")
+			
+			local oldNamecall
+			oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+				local method = getnamecallmethod()
+				
+				if getgenv().fov_block and self == TweenService and method == "Create" then
+					local args = {...}
+					local target = args[1]
+					local info = args[2]
+					local props = args[3]
+					
+					if typeof(target) == "Instance" and target.ClassName == "Camera" and type(props) == "table" and props.FieldOfView ~= nil then
+						
+						local newProps = {}
+						for k, v in pairs(props) do
+							if k ~= "FieldOfView" then
+								newProps[k] = v
+							end
+						end
+						
+						args[3] = newProps
+						
+						return oldNamecall(self, unpack(args))
+					end
 				end
-			end
-
-			-- (пере)подписка на изменение FOV текущей камеры
-			local function bindCam()
-				if G.fovPropConn then G.fovPropConn:Disconnect() end
-				local c = workspace.CurrentCamera
-				if not c then return end
-				c.FieldOfView = G.hooked_fov11
-				G.fovPropConn = c:GetPropertyChangedSignal("FieldOfView"):Connect(apply)
-			end
-
-			-- вешаем инфраструктуру один раз
-			if not G.fov_lock_bool then
-				G.fov_lock_bool = true
-				-- смена камеры игрой -> переподписываемся на новую
-				G.fovCamConn = workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCam)
-				-- страховка каждый кадр после апдейта камеры
-				pcall(function() RunService:UnbindFromRenderStep("FovLock11") end)
-				RunService:BindToRenderStep("FovLock11", Enum.RenderPriority.Camera.Value + 1, apply)
-			end
-
-			bindCam()
+				
+				return oldNamecall(self, ...)
+			end)
+			
+			local oldNewIndex
+			oldNewIndex = hookmetamethod(game, "__newindex", function(self, key, value)
+				if not checkcaller() and getgenv().fov_block and key == "FieldOfView" then
+					if typeof(self) == "Instance" and self.ClassName == "Camera" then
+						value = getgenv().hooked_fov11
+					end
+				end
+				
+				return oldNewIndex(self, key, value)
+			end)
 		end
 	})
 
