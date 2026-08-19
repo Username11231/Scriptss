@@ -1,3 +1,4 @@
+-- V3
 -- реворкнутая менюшка для телефонов и оптимизмированная by database :3
 
 local InputService = game:GetService('UserInputService');
@@ -490,8 +491,8 @@ function Library:MakeDraggable(Instance, Cutoff)
         local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - DragStart;
 
         Instance.Position = UDim2.new(
-            StartPos.X.Scale, StartPos.X.Offset + Delta.X + Instance.Size.X.Offset * Instance.AnchorPoint.X,
-            StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y + Instance.Size.Y.Offset * Instance.AnchorPoint.Y
+            StartPos.X.Scale, StartPos.X.Offset + Delta.X,
+            StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y
         );
     end));
 
@@ -1354,10 +1355,71 @@ do
             ModeButtons[Mode] = ModeButton;
         end;
 
-        function KeyPicker:Update()
-            if Info.NoUI then
-                return;
+        local MobileBtn;
+    local function UpdateMobileButton()
+        if MobileBtn then
+            MobileBtn.Text = KeyPicker.Value == 'None' and '-' or KeyPicker.Value:sub(1, 2);
+            if KeyPicker.Mode == 'Always' then
+                MobileBtn.Visible = false;
+            else
+                MobileBtn.Visible = Library.ShowBindsButtonForPC or Library.IsMobile;
             end;
+        end;
+    end;
+    if Library.ShowBindsButtonForPC or Library.IsMobile then
+        MobileBtn = Library:Create('TextButton', {
+            Name = '__BindBtn_' .. Idx;
+            BackgroundColor3 = Library.MainColor;
+            BorderColor3 = Library.OutlineColor;
+            AnchorPoint = Vector2.new(0.5, 0.5);
+            Position = UDim2.new(0.85, 0, 0.1 + math.random(0, 10) * 0.03, 0);
+            Size = UDim2.fromOffset(36, 36);
+            ZIndex = 290;
+            Text = KeyPicker.Value == 'None' and '-' or KeyPicker.Value:sub(1, 2);
+            Font = Library.Font;
+            TextSize = 18;
+            TextColor3 = Library.FontColor;
+            Parent = ScreenGui;
+        });
+        MobileBtn.Active = true;
+        Library:Create('UICorner', { CornerRadius = UDim.new(1, 0); Parent = MobileBtn; });
+        Library:AddToRegistry(MobileBtn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; TextColor3 = 'FontColor'; });
+        local MStart, MStartPos, MMoved;
+        MobileBtn.InputBegan:Connect(function(Input)
+            if not Library:IsPrimaryInput(Input) then return; end;
+            MStart = Vector2.new(Input.Position.X, Input.Position.Y);
+            MStartPos = MobileBtn.Position;
+            MMoved = false;
+        end);
+        MobileBtn.InputChanged:Connect(function(Input)
+            if not MStart then return; end;
+            local T = Input.UserInputType;
+            if T ~= Enum.UserInputType.MouseMovement and T ~= Enum.UserInputType.Touch then return; end;
+            local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - MStart;
+            if Delta.Magnitude > 12 then MMoved = true; end;
+            if KeyPicker.Mode ~= 'Toggle' then return; end;
+            local VP = workspace.CurrentCamera.ViewportSize;
+            MobileBtn.Position = UDim2.new(
+                0, math.clamp(MStartPos.X.Offset + Delta.X, 22, math.max(22, VP.X - 22)),
+                0, math.clamp(MStartPos.Y.Offset + Delta.Y, 22, math.max(22, VP.Y - 22))
+            );
+        end);
+        MobileBtn.InputEnded:Connect(function(Input)
+            if Library:IsPrimaryInput(Input) then
+                if not MMoved then
+                    KeyPicker.Toggled = not KeyPicker.Toggled;
+                    KeyPicker:DoClick();
+                    KeyPicker:Update();
+                end;
+                MStart = nil;
+            end;
+        end);
+    end;
+    function KeyPicker:Update()
+        UpdateMobileButton();
+        if Info.NoUI then
+            return;
+        end;
 
             local State = KeyPicker:GetState();
             ContainerLabel.Text = string.format('[%s] %s (%s)', KeyPicker.Value, Info.Text, KeyPicker.Mode);
@@ -1381,6 +1443,7 @@ do
         end;
 
         function KeyPicker:GetState()
+        if not KeyPicker.Enabled then return false; end;
             if KeyPicker.Mode == 'Always' then
                 return true;
             elseif KeyPicker.Mode == 'Hold' then
@@ -1399,13 +1462,50 @@ do
             end;
         end;
 
-        function KeyPicker:SetValue(Data)
-            local Key, Mode = Data[1], Data[2];
-            DisplayLabel.Text = Key;
-            KeyPicker.Value = Key;
-            ModeButtons[Mode]:Select();
-            KeyPicker:Update();
+        KeyPicker.Enabled = true;
+    local EnabledFrame = Library:Create('Frame', {
+        BackgroundColor3 = Library.MainColor;
+        BorderColor3 = Library.OutlineColor;
+        BorderMode = Enum.BorderMode.Inset;
+        Size = UDim2.new(0, 13, 0, 13);
+        Position = UDim2.new(1, -15, 0.5, -6);
+        ZIndex = 9;
+        Parent = PickInner;
+    });
+    Library:AddToRegistry(EnabledFrame, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
+    local EnabledFill = Library:Create('Frame', {
+        BackgroundColor3 = Library.AccentColor;
+        BorderSizePixel = 0;
+        Size = UDim2.new(1, -2, 1, -2);
+        Position = UDim2.new(0, 1, 0, 1);
+        ZIndex = 10;
+        Visible = true;
+        Parent = EnabledFrame;
+    });
+    Library:AddToRegistry(EnabledFill, { BackgroundColor3 = 'AccentColor'; });
+    local function UpdateEnabledVisual()
+        EnabledFill.Visible = KeyPicker.Enabled;
+        if MobileBtn then
+            MobileBtn.Visible = KeyPicker.Enabled and (Library.ShowBindsButtonForPC or Library.IsMobile) and KeyPicker.Mode ~= 'Always';
         end;
+        ContainerLabel.Visible = KeyPicker.Enabled and ContainerLabel.Visible;
+    end;
+    EnabledFrame.InputBegan:Connect(function(Input)
+        if Library:IsPrimaryInput(Input) and not Library:MouseIsOverOpenedFrame() then
+            KeyPicker.Enabled = not KeyPicker.Enabled;
+            UpdateEnabledVisual();
+            Library:AttemptSave();
+        end;
+    end);
+    function KeyPicker:SetValue(Data)
+        local Key, Mode = Data[1], Data[2];
+        DisplayLabel.Text = Key;
+        KeyPicker.Value = Key;
+        if Mode and ModeButtons[Mode] then
+            ModeButtons[Mode]:Select();
+        end;
+        KeyPicker:Update();
+    end;
 
         function KeyPicker:OnClick(Callback)
             KeyPicker.Clicked = Callback
@@ -3001,6 +3101,11 @@ function Library:CreateWindow(...)
     else
         Library.IsMobileButtonVisibleForPC = false;
     end
+    if Config.ShowBindsButtonForPC ~= nil then
+        Library.ShowBindsButtonForPC = Config.ShowBindsButtonForPC;
+    else
+        Library.ShowBindsButtonForPC = false;
+    end
 
     local Window = {
         Tabs = {};
@@ -3600,12 +3705,12 @@ function Library:CreateWindow(...)
     end
 
     Library:GiveSignal(InputService.InputBegan:Connect(function(Input, Processed)
-        if type(Library.ToggleKeybind) == 'table' and Library.ToggleKeybind.Type == 'KeyPicker' then
+        if Library.OpenBind and Input.KeyCode == Library.OpenBind then
+            task.spawn(Library.Toggle)
+        elseif type(Library.ToggleKeybind) == 'table' and Library.ToggleKeybind.Type == 'KeyPicker' then
             if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode.Name == Library.ToggleKeybind.Value then
                 task.spawn(Library.Toggle)
             end
-        elseif Library.OpenBind and Input.KeyCode == Library.OpenBind then
-            task.spawn(Library.Toggle)
         elseif Input.KeyCode == Enum.KeyCode.RightControl or (Input.KeyCode == Enum.KeyCode.RightShift and (not Processed)) then
             task.spawn(Library.Toggle)
         end
