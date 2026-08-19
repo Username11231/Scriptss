@@ -1,4 +1,4 @@
--- ===== Services =====
+-- ===== Services ===== v2
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players          = game:GetService("Players")
@@ -50,24 +50,26 @@ local function create(class, props, children)
 end
 
 local function corner(r)
-    return Instance.new("UICorner", { CornerRadius = UDim.new(0, r or 8) })
+    local inst = Instance.new("UICorner")
+    inst.CornerRadius = UDim.new(0, r or 8)
+    return inst
 end
 
 local function stroke(col, thick, transp)
-    return Instance.new("UIStroke", {
-        Color = col or Color3.fromRGB(58, 58, 68),
-        Thickness = thick or 1,
-        Transparency = transp or 0
-    })
+    local inst = Instance.new("UIStroke")
+    inst.Color = col or Color3.fromRGB(58, 58, 68)
+    inst.Thickness = thick or 1
+    inst.Transparency = transp or 0
+    return inst
 end
 
 local function padding(a)
-    return Instance.new("UIPadding", {
-        PaddingTop = UDim.new(0, a),
-        PaddingBottom = UDim.new(0, a),
-        PaddingLeft = UDim.new(0, a),
-        PaddingRight = UDim.new(0, a)
-    })
+    local inst = Instance.new("UIPadding")
+    inst.PaddingTop = UDim.new(0, a)
+    inst.PaddingBottom = UDim.new(0, a)
+    inst.PaddingLeft = UDim.new(0, a)
+    inst.PaddingRight = UDim.new(0, a)
+    return inst
 end
 
 local function darken(col, factor)
