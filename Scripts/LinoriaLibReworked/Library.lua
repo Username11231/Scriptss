@@ -262,7 +262,7 @@ do
         end;
     end);
 
-    ScreenGui.ChildRemoving:Connect(function(Child)
+    ScreenGui.DescendantRemoving:Connect(function(Child)
         ScaledFrames[Child] = nil;
     end);
 
