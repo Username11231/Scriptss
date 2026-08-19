@@ -1,4 +1,4 @@
--- V5
+-- V6
 -- реворкнутая менюшка для телефонов и оптимизмированная by database :3
 local InputService = game:GetService('UserInputService');
 local TextService = game:GetService('TextService');
@@ -146,6 +146,7 @@ do
             if Library:MouseIsOverOpenedFrame() then return; end;
             EnsureTooltip();
             TooltipOwner = HoverInstance;
+
             local Size = TooltipCache[InfoStr];
             if not Size then
                 local X, Y = Library:GetTextBounds(InfoStr, Library.Font, 14);
@@ -155,8 +156,10 @@ do
                     TooltipCache[InfoStr] = Size;
                 end;
             end;
+
             TooltipLabel.Text = InfoStr;
             TooltipFrame.Size = UDim2.fromOffset(Size.X + 5, Size.Y + 4);
+            TooltipFrame.Position = UDim2.fromOffset(Mouse.X + 15, Mouse.Y + 12);
             TooltipFrame.Visible = true;
             TooltipShown = true;
         end);
@@ -244,7 +247,7 @@ do
     local RainbowAcc, RainbowHue, VPAcc = 0, 0, 0;
     table.insert(Library.Signals, RenderStepped:Connect(function(Delta)
         if TooltipShown and TooltipFrame then
-            TooltipFrame.Position = UDim2.fromOffset(Library.PointerPos.X + 15, Library.PointerPos.Y + 12);
+            TooltipFrame.Position = UDim2.fromOffset(Mouse.X + 15, Mouse.Y + 12);
         end;
         if Library.RainbowEnabled then
             RainbowAcc += Delta;
@@ -340,12 +343,15 @@ do
         for _, _ in next, ScreenGui:GetChildren() do
             if string.match(_.Name, '^__BindBtn_') then BtnCount += 1; end;
         end;
+        local VP0 = workspace.CurrentCamera.ViewportSize;
+        local StartX = VP0.X * 0.85;
+        local StartY = VP0.Y * (0.15 + BtnCount * 0.08);
         local Btn = Library:Create('TextButton', {
             Name = '__BindBtn_' .. Idx;
             BackgroundColor3 = Library.MainColor;
             BorderColor3 = Library.OutlineColor;
             AnchorPoint = Vector2.new(0.5, 0.5);
-            Position = UDim2.new(0.85, 0, 0.15 + BtnCount * 0.08, 0);
+            Position = UDim2.new(0, StartX, 0, StartY);
             Size = UDim2.fromOffset(36, 36);
             ZIndex = 290;
             Text = GetKeyDisplayText();
@@ -680,6 +686,7 @@ do
             BorderMode = Enum.BorderMode.Inset;
             Size = UDim2.new(0, 28, 0, 14);
             ZIndex = 6;
+            Active = true;
             Parent = ToggleLabel;
         });
         local PickerFrameOuter = Library:Create('Frame', {
@@ -1071,7 +1078,7 @@ do
             Library:AttemptSave();
         end, true);
         DisplayFrame.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 and not Library:MouseIsOverOpenedFrame() then
+            if Library:IsPrimaryInput(Input) and not Library:MouseIsOverOpenedFrame() then
                 if PickerFrameOuter.Visible then
                     ColorPicker:Hide()
                 else
@@ -1130,7 +1137,7 @@ do
         Options[Idx] = ColorPicker;
         return self;
     end;
-    function Funcs:AddKeyPicker(Idx, Info)
+        function Funcs:AddKeyPicker(Idx, Info)
         local ParentObj = self;
         local ToggleLabel = self.TextLabel;
         local Container = self.Container;
@@ -1154,6 +1161,7 @@ do
             BorderColor3 = Color3.new(0, 0, 0);
             Size = UDim2.new(0, 28, 0, 15);
             ZIndex = 6;
+            Active = true;
             Parent = ToggleLabel;
         });
         local PickInner = Library:Create('Frame', {
@@ -1219,6 +1227,7 @@ do
             Size = UDim2.new(0, 13, 0, 13);
             Position = UDim2.new(0, -18, 0.5, -6);
             ZIndex = 9;
+            Active = true;
             Parent = PickOuter;
         });
         Library:AddToRegistry(EnabledCheckbox, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
@@ -1247,9 +1256,7 @@ do
         end;
         local function UpdateEnabledVisual()
             EnabledFill.Visible = KeyPicker.Enabled;
-            if MobileBtn then
-                UpdateMobileButton();
-            end;
+            UpdateMobileButton();
         end;
         EnabledCheckbox.InputBegan:Connect(function(Input)
             if Library:IsPrimaryInput(Input) and not Library:MouseIsOverOpenedFrame() then
@@ -1261,12 +1268,14 @@ do
         MobileBtn = Library:CreateMobileBindButton(KeyPicker, Idx);
         if MobileBtn then
             local MStart, MStartOffset, MMoved, MHoldActive;
+            local Dragging = false;
             MobileBtn.InputBegan:Connect(function(Input)
                 if not Library:IsPrimaryInput(Input) then return; end;
                 local P = Input.Position;
                 MStart = Vector2.new(P.X, P.Y);
                 MStartOffset = Vector2.new(MobileBtn.Position.X.Offset, MobileBtn.Position.Y.Offset);
                 MMoved = false;
+                Dragging = true;
                 if KeyPicker.Mode == 'Hold' then
                     MHoldActive = true;
                     KeyPicker.Toggled = true;
@@ -1275,7 +1284,7 @@ do
                 end;
             end);
             MobileBtn.InputChanged:Connect(function(Input)
-                if not MStart then return; end;
+                if not Dragging or not MStart then return; end;
                 local T = Input.UserInputType;
                 if T ~= Enum.UserInputType.MouseMovement and T ~= Enum.UserInputType.Touch then return; end;
                 local Pos = Vector2.new(Input.Position.X, Input.Position.Y);
@@ -1289,7 +1298,8 @@ do
                 );
             end);
             MobileBtn.InputEnded:Connect(function(Input)
-                if Library:IsPrimaryInput(Input) then
+                if Library:IsPrimaryInput(Input) and Dragging then
+                    Dragging = false;
                     if KeyPicker.Mode == 'Hold' and MHoldActive then
                         KeyPicker.Toggled = false;
                         KeyPicker:Update();
@@ -1307,7 +1317,7 @@ do
         end;
         local Modes = Info.Modes or { 'Always', 'Toggle', 'Hold' };
         local ModeButtons = {};
-        for Idx, Mode in next, Modes do
+        for _, Mode in next, Modes do
             local ModeButton = {};
             local Label = Library:CreateLabel({
                 Active = false;
@@ -1345,9 +1355,7 @@ do
             ModeButtons[Mode] = ModeButton;
         end;
         function KeyPicker:Update()
-            if MobileBtn then
-                UpdateMobileButton();
-            end;
+            UpdateMobileButton();
             if Info.NoUI then
                 return;
             end;
@@ -1430,7 +1438,7 @@ do
                         task.wait(0.4);
                     end;
                 end);
-                task.wait(0.2);
+                task.wait(0.35);
                 local Event;
                 Event = InputService.InputBegan:Connect(function(Input)
                     local Key;
@@ -1440,15 +1448,20 @@ do
                         Key = 'MB1';
                     elseif Input.UserInputType == Enum.UserInputType.MouseButton2 then
                         Key = 'MB2';
+                    elseif Input.UserInputType == Enum.UserInputType.Touch then
+                        Key = 'MB1';
                     end;
-                    Break = true;
-                    Picking = false;
-                    DisplayLabel.Text = Key;
-                    KeyPicker.Value = Key;
-                    Library:SafeCallback(KeyPicker.ChangedCallback, Input.KeyCode or Input.UserInputType)
-                    Library:SafeCallback(KeyPicker.Changed, Input.KeyCode or Input.UserInputType)
-                    Library:AttemptSave();
-                    Event:Disconnect();
+                    if Key then
+                        Break = true;
+                        Picking = false;
+                        DisplayLabel.Text = Key;
+                        KeyPicker.Value = Key;
+                        Library:SafeCallback(KeyPicker.ChangedCallback, Input.KeyCode or Input.UserInputType)
+                        Library:SafeCallback(KeyPicker.Changed, Input.KeyCode or Input.UserInputType)
+                        Library:AttemptSave();
+                        KeyPicker:Update();
+                        Event:Disconnect();
+                    end;
                 end);
             elseif Library:IsSecondaryInput(Input) and not Library:MouseIsOverOpenedFrame() then
                 ModeSelectOuter.Visible = true;
@@ -1490,11 +1503,6 @@ do
         Options[Idx] = KeyPicker;
         return self;
     end;
-    BaseAddons.__index = Funcs;
-    BaseAddons.__namecall = function(Table, Key, ...)
-        return Funcs[Key](...);
-    end;
-end;
 local BaseGroupbox = {};
 do
     local Funcs = {};
@@ -2797,6 +2805,7 @@ function Library:CreateWindow(...)
     else
         Library.ShowBindsButtonForPC = false;
     end
+    
     local Window = {
         Tabs = {};
     };
