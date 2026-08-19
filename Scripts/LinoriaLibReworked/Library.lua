@@ -1,4 +1,4 @@
--- V7
+-- V8
 -- реворкнутая менюшка для телефонов и оптимизмированная by database :3
 local InputService = game:GetService('UserInputService');
 local TextService = game:GetService('TextService');
@@ -413,45 +413,45 @@ do
         return Btn;
     end;
     function Library:CreateMobileBindButton(KeyPicker, Idx)
-        if not (Library.ShowBindsButtonForPC or Library.IsMobile) then return nil; end;
-        local function GetKeyDisplayText()
-            local Key = KeyPicker.Value;
-            if Key == 'MB1' then return 'LMB'; end;
-            if Key == 'MB2' then return 'RMB'; end;
-            if Key == 'MB3' then return 'MMB'; end;
-            if Key == 'None' or Key == '' then return '-'; end;
-            return Key;
-        end;
-        local BtnCount = 0;
-        for _, Child in next, ScreenGui:GetChildren() do
-            if string.match(Child.Name, '^__BindBtn_') then BtnCount += 1; end;
-        end;
-        local VP0 = workspace.CurrentCamera.ViewportSize;
-        local StartX = VP0.X * 0.85;
-        local StartY = VP0.Y * (0.15 + BtnCount * 0.08);
-        local Btn = Library:Create('TextButton', {
-            Name = '__BindBtn_' .. Idx;
-            BackgroundColor3 = Library.MainColor;
-            BorderColor3 = Library.OutlineColor;
-            AnchorPoint = Vector2.new(0.5, 0.5);
-            Position = UDim2.new(0, StartX, 0, StartY);
-            Size = UDim2.fromOffset(36, 36);
-            ZIndex = 290;
-            Text = GetKeyDisplayText();
-            Font = Library.Font;
-            TextSize = 14;
-            TextColor3 = Library.FontColor;
-            BackgroundTransparency = 0;
-            AutoButtonColor = false;
-            Parent = ScreenGui;
-        });
-        Btn.Active = true;
-        Library:Create('UICorner', { CornerRadius = UDim.new(1, 0); Parent = Btn; });
-        Library:AddToRegistry(Btn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; TextColor3 = 'FontColor'; });
-        Library.MobileBindButtons = Library.MobileBindButtons or {};
-        Library.MobileBindButtons[Idx] = Btn;
-        return Btn;
-    end;
+if not (Library.ShowBindsButtonForPC or Library.IsMobile) then return nil; end;
+local function GetKeyDisplayText()
+local Key = KeyPicker.Value;
+if Key == 'MB1' then return 'LMB'; end;
+if Key == 'MB2' then return 'RMB'; end;
+if Key == 'MB3' then return 'MMB'; end;
+if Key == 'None' or Key == '' then return '-'; end;
+return Key;
+end;
+local BtnCount = 0;
+for _, Child in next, ScreenGui:GetChildren() do
+if string.match(Child.Name, '^__BindBtn_') then BtnCount += 1; end;
+end;
+local VP0 = workspace.CurrentCamera.ViewportSize;
+local StartX = VP0.X * 0.85;
+local StartY = VP0.Y * (0.15 + BtnCount * 0.08);
+local Btn = Library:Create('TextButton', {
+Name = '__BindBtn_' .. Idx;
+BackgroundColor3 = Library.MainColor;
+BorderColor3 = Library.OutlineColor;
+AnchorPoint = Vector2.new(0.5, 0.5);
+Position = UDim2.new(0, StartX, 0, StartY);
+Size = UDim2.fromOffset(36, 36);
+ZIndex = 290;
+Text = GetKeyDisplayText();
+Font = Library.Font;
+TextSize = 14;
+TextColor3 = Library.FontColor;
+BackgroundTransparency = 0;
+AutoButtonColor = false;
+Parent = ScreenGui;
+});
+Btn.Active = true;
+Library:Create('UICorner', { CornerRadius = UDim.new(1, 0); Parent = Btn; });
+Library:AddToRegistry(Btn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; TextColor3 = 'FontColor'; });
+Library.MobileBindButtons = Library.MobileBindButtons or {};
+Library.MobileBindButtons[Idx] = Btn;
+return Btn;
+end;
 end;
 local function GetPlayersString()
     local PlayerList = Players:GetPlayers();
@@ -1306,55 +1306,6 @@ do
             end;
         end);
         MobileBtn = Library:CreateMobileBindButton(KeyPicker, Idx);
-        if MobileBtn then
-            local MStart, MStartOffset, MMoved, MHoldActive;
-            local Dragging = false;
-            MobileBtn.InputBegan:Connect(function(Input)
-                if not Library:IsPrimaryInput(Input) then return; end;
-                local P = Input.Position;
-                MStart = Vector2.new(P.X, P.Y);
-                MStartOffset = Vector2.new(MobileBtn.Position.X.Offset, MobileBtn.Position.Y.Offset);
-                MMoved = false;
-                Dragging = true;
-                if KeyPicker.Mode == 'Hold' then
-                    MHoldActive = true;
-                    KeyPicker.Toggled = true;
-                    KeyPicker:DoClick();
-                    KeyPicker:Update();
-                end;
-            end);
-            MobileBtn.InputChanged:Connect(function(Input)
-                if not Dragging or not MStart then return; end;
-                local T = Input.UserInputType;
-                if T ~= Enum.UserInputType.MouseMovement and T ~= Enum.UserInputType.Touch then return; end;
-                local Pos = Vector2.new(Input.Position.X, Input.Position.Y);
-                local Delta = Pos - MStart;
-                if Delta.Magnitude > 12 then MMoved = true; end;
-                if KeyPicker.Mode ~= 'Toggle' then return; end;
-                local VP = workspace.CurrentCamera.ViewportSize;
-                MobileBtn.Position = UDim2.new(
-                    0, math.clamp(MStartOffset.X + Delta.X, 22, math.max(22, VP.X - 22)),
-                    0, math.clamp(MStartOffset.Y + Delta.Y, 22, math.max(22, VP.Y - 22))
-                );
-            end);
-            MobileBtn.InputEnded:Connect(function(Input)
-                if Library:IsPrimaryInput(Input) and Dragging then
-                    Dragging = false;
-                    if KeyPicker.Mode == 'Hold' and MHoldActive then
-                        KeyPicker.Toggled = false;
-                        KeyPicker:Update();
-                        MHoldActive = false;
-                    elseif not MMoved and KeyPicker.Mode == 'Toggle' then
-                        KeyPicker.Toggled = not KeyPicker.Toggled;
-                        KeyPicker:DoClick();
-                        KeyPicker:Update();
-                    end;
-                    MStart = nil;
-                    MStartOffset = nil;
-                    MMoved = nil;
-                end;
-            end);
-        end;
         local Modes = Info.Modes or { 'Always', 'Toggle', 'Hold' };
         local ModeButtons = {};
         for _, Mode in next, Modes do
@@ -1541,8 +1492,13 @@ do
         end))
         KeyPicker:Update();
         Options[Idx] = KeyPicker;
-        return self;
-    end;
+return self;
+end;
+BaseAddons.__index = Funcs;
+BaseAddons.__namecall = function(Table, Key, ...)
+return Funcs[Key](...);
+end;
+end;
 local BaseGroupbox = {};
 do
     local Funcs = {};
