@@ -1,4 +1,4 @@
--- V3
+-- V4
 -- реворкнутая менюшка для телефонов и оптимизмированная by database :3
 
 local InputService = game:GetService('UserInputService');
@@ -86,18 +86,30 @@ do
 
     function Library:AddDragHandler(GuiObject, OnMove, OnEnd, AllowOverOpened)
         local Entry = { Object = GuiObject; OnMove = OnMove; OnEnd = OnEnd; Active = false };
-
+        local StartPointer, StartOffset;
         GuiObject.InputBegan:Connect(function(Input)
             if not Library:IsPrimaryInput(Input) then return; end;
             if not AllowOverOpened and Library:MouseIsOverOpenedFrame() then return; end;
-
             local P = Input.Position;
             Library.PointerPos = Vector2.new(P.X, P.Y);
+            StartPointer = Library.PointerPos;
+            StartOffset = Vector2.new(GuiObject.Position.X.Offset, GuiObject.Position.Y.Offset);
             Entry.Active = true;
             OnMove(Library.PointerPos);
         end);
-
-        Library.DragRegistry[#Library.DragRegistry + 1] = Entry;
+        table.insert(Library.DragRegistry, {
+            Object = GuiObject;
+            Update = function(Pos)
+                if not Entry.Active then return; end;
+                local Delta = Pos - StartPointer;
+                OnMove(StartOffset + Delta, Delta);
+            end;
+            End = function()
+                if not Entry.Active then return; end;
+                Entry.Active = false;
+                if OnEnd then OnEnd(); end;
+            end;
+        });
         return Entry;
     end;
 
@@ -106,30 +118,24 @@ do
         if T ~= Enum.UserInputType.MouseMovement and T ~= Enum.UserInputType.Touch then
             return;
         end;
-
         local P = Input.Position;
         Library.PointerPos = Vector2.new(P.X, P.Y);
-
         local Registry = Library.DragRegistry;
         for Idx = 1, #Registry do
             local Entry = Registry[Idx];
-            if Entry.Active then
-                Entry.OnMove(Library.PointerPos);
+            if Entry.Update then
+                Entry.Update(Library.PointerPos);
             end;
         end;
     end));
 
     table.insert(Library.Signals, InputService.InputEnded:Connect(function(Input)
         if not Library:IsPrimaryInput(Input) then return; end;
-
         local Registry = Library.DragRegistry;
         for Idx = 1, #Registry do
             local Entry = Registry[Idx];
-            if Entry.Active then
-                Entry.Active = false;
-                if Entry.OnEnd then
-                    Entry.OnEnd();
-                end;
+            if Entry.End then
+                Entry.End();
             end;
         end;
     end));
@@ -315,7 +321,6 @@ do
     function Library:CreateMobileToggleButton(ShowOnPC)
         if Library.MobileToggleButton then return; end;
         if not (Library.IsMobile or ShowOnPC) then return; end;
-
         local Btn = Library:Create('Frame', {
             Name = '__MobileToggle';
             BackgroundColor3 = Library.MainColor;
@@ -327,9 +332,7 @@ do
             Parent = ScreenGui;
         });
         Btn.Active = true;
-
         Library:Create('UICorner', { CornerRadius = UDim.new(1, 0); Parent = Btn; });
-
         Library:Create('TextLabel', {
             BackgroundTransparency = 1;
             Size = UDim2.new(1, 0, 1, 0);
@@ -340,40 +343,45 @@ do
             ZIndex = 301;
             Parent = Btn;
         });
-
         Library:AddToRegistry(Btn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
-
         local function ToggleMenu()
             if type(Library.Toggle) == 'function' then
                 task.spawn(Library.Toggle);
             end;
         end;
-
-        local StartPointer, StartPos, MovedDist;
-
-        Library:AddDragHandler(Btn, function(Pos)
-            if not StartPos then
-                StartPointer, StartPos, MovedDist = Pos, Btn.Position, 0;
-            end;
-
+        local StartPointer, StartOffset, MovedDist;
+        Btn.InputBegan:Connect(function(Input)
+            if not Library:IsPrimaryInput(Input) then return; end;
+            local P = Input.Position;
+            StartPointer = Vector2.new(P.X, P.Y);
+            StartOffset = Vector2.new(Btn.Position.X.Offset, Btn.Position.Y.Offset);
+            MovedDist = 0;
+        end);
+        Btn.InputChanged:Connect(function(Input)
+            if not StartPointer then return; end;
+            local T = Input.UserInputType;
+            if T ~= Enum.UserInputType.MouseMovement and T ~= Enum.UserInputType.Touch then return; end;
+            local Pos = Vector2.new(Input.Position.X, Input.Position.Y);
             local Delta = Pos - StartPointer;
             MovedDist = Delta.Magnitude;
-
             local VP = workspace.CurrentCamera.ViewportSize;
             Btn.Position = UDim2.fromOffset(
-                math.clamp(StartPos.X.Offset + Delta.X, 26, math.max(26, VP.X - 26)),
-                math.clamp(StartPos.Y.Offset + Delta.Y, 26, math.max(26, VP.Y - 26))
+                math.clamp(StartOffset.X + Delta.X, 26, math.max(26, VP.X - 26)),
+                math.clamp(StartOffset.Y + Delta.Y, 26, math.max(26, VP.Y - 26))
             );
-        end, function()
-            if MovedDist ~= nil and MovedDist < 12 then
-                ToggleMenu();
+        end);
+        Btn.InputEnded:Connect(function(Input)
+            if Library:IsPrimaryInput(Input) then
+                if MovedDist ~= nil and MovedDist < 12 then
+                    ToggleMenu();
+                end;
+                StartPointer = nil;
+                StartOffset = nil;
+                MovedDist = nil;
             end;
-            StartPointer, StartPos, MovedDist = nil, nil, nil;
-        end, true);
-
+        end);
         Library.MobileToggleButton = Btn;
     end;
-end;
 
 local function GetPlayersString()
     local PlayerList = Players:GetPlayers();
@@ -467,35 +475,27 @@ end;
 
 function Library:MakeDraggable(Instance, Cutoff)
     Instance.Active = true;
-
     local Dragging = false;
-    local DragStart, StartPos;
-
+    local DragStart, StartOffset;
     Instance.InputBegan:Connect(function(Input)
         if not Library:IsPrimaryInput(Input) then return; end;
-
         if (Input.Position.Y - Instance.AbsolutePosition.Y) > (Cutoff or 40) * (Library.Scale or 1) then
             return;
         end;
-
         Dragging = true;
         DragStart = Vector2.new(Input.Position.X, Input.Position.Y);
-        StartPos = Instance.Position;
+        StartOffset = Vector2.new(Instance.Position.X.Offset, Instance.Position.Y.Offset);
     end);
-
     table.insert(Library.Signals, InputService.InputChanged:Connect(function(Input)
         if not Dragging then return; end;
         local T = Input.UserInputType;
         if T ~= Enum.UserInputType.MouseMovement and T ~= Enum.UserInputType.Touch then return; end;
-
         local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - DragStart;
-
         Instance.Position = UDim2.new(
-            StartPos.X.Scale, StartPos.X.Offset + Delta.X,
-            StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y
+            Instance.Position.X.Scale, StartOffset.X + Delta.X,
+            Instance.Position.Y.Scale, StartOffset.Y + Delta.Y
         );
     end));
-
     table.insert(Library.Signals, InputService.InputEnded:Connect(function(Input)
         if Library:IsPrimaryInput(Input) then
             Dragging = false;
@@ -1301,6 +1301,126 @@ do
             Parent = ModeSelectInner;
         });
 
+        KeyPicker.Enabled = true;
+        local EnabledCheckbox = Library:Create('Frame', {
+            BackgroundColor3 = Library.MainColor;
+            BorderColor3 = Library.OutlineColor;
+            BorderMode = Enum.BorderMode.Inset;
+            Size = UDim2.new(0, 13, 0, 13);
+            Position = UDim2.new(1, -18, 0.5, -6);
+            ZIndex = 9;
+            Parent = PickInner;
+        });
+        Library:AddToRegistry(EnabledCheckbox, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; });
+        local EnabledFill = Library:Create('Frame', {
+            BackgroundColor3 = Library.AccentColor;
+            BorderSizePixel = 0;
+            Size = UDim2.new(1, -2, 1, -2);
+            Position = UDim2.new(0, 1, 0, 1);
+            ZIndex = 10;
+            Visible = true;
+            Parent = EnabledCheckbox;
+        });
+        Library:AddToRegistry(EnabledFill, { BackgroundColor3 = 'AccentColor'; });
+        local function UpdateEnabledVisual()
+            EnabledFill.Visible = KeyPicker.Enabled;
+            if MobileBtn then
+                MobileBtn.Visible = KeyPicker.Enabled and (Library.ShowBindsButtonForPC or Library.IsMobile) and KeyPicker.Mode ~= 'Always';
+            end;
+            ContainerLabel.Visible = KeyPicker.Enabled and ContainerLabel.Visible;
+        end;
+        EnabledCheckbox.InputBegan:Connect(function(Input)
+            if Library:IsPrimaryInput(Input) and not Library:MouseIsOverOpenedFrame() then
+                KeyPicker.Enabled = not KeyPicker.Enabled;
+                UpdateEnabledVisual();
+                Library:AttemptSave();
+            end;
+        end);
+        local MobileBtn;
+        local function GetKeyDisplayText()
+            local Key = KeyPicker.Value;
+            if Key == 'MB1' then return 'LMB'; end;
+            if Key == 'MB2' then return 'RMB'; end;
+            if Key == 'MB3' then return 'MMB'; end;
+            if Key == 'None' or Key == '' then return '-'; end;
+            return Key;
+        end;
+        local function UpdateMobileButton()
+            if MobileBtn then
+                MobileBtn.TextLabel.Text = GetKeyDisplayText();
+                MobileBtn.Visible = KeyPicker.Enabled and (Library.ShowBindsButtonForPC or Library.IsMobile) and KeyPicker.Mode ~= 'Always';
+            end;
+        end;
+        if Library.ShowBindsButtonForPC or Library.IsMobile then
+            local BtnCount = 0;
+            for _, _ in next, ScreenGui:GetChildren() do
+                if string.match(_.Name, '__BindBtn_') then BtnCount += 1; end;
+            end;
+            MobileBtn = Library:Create('TextButton', {
+                Name = '__BindBtn_' .. Idx;
+                BackgroundColor3 = Library.MainColor;
+                BorderColor3 = Library.OutlineColor;
+                AnchorPoint = Vector2.new(0.5, 0.5);
+                Position = UDim2.new(0.85, 0, 0.15 + BtnCount * 0.08, 0);
+                Size = UDim2.fromOffset(36, 36);
+                ZIndex = 290;
+                Text = GetKeyDisplayText();
+                Font = Library.Font;
+                TextSize = 14;
+                TextColor3 = Library.FontColor;
+                BackgroundTransparency = 0;
+                AutoButtonColor = false;
+                Parent = ScreenGui;
+            });
+            MobileBtn.Active = true;
+            Library:Create('UICorner', { CornerRadius = UDim.new(1, 0); Parent = MobileBtn; });
+            Library:AddToRegistry(MobileBtn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; TextColor3 = 'FontColor'; });
+            local MStart, MStartOffset, MMoved, MHoldActive;
+            MobileBtn.InputBegan:Connect(function(Input)
+                if not Library:IsPrimaryInput(Input) then return; end;
+                local P = Input.Position;
+                MStart = Vector2.new(P.X, P.Y);
+                MStartOffset = Vector2.new(MobileBtn.Position.X.Offset, MobileBtn.Position.Y.Offset);
+                MMoved = false;
+                if KeyPicker.Mode == 'Hold' then
+                    MHoldActive = true;
+                    KeyPicker.Toggled = true;
+                    KeyPicker:DoClick();
+                    KeyPicker:Update();
+                end;
+            end);
+            MobileBtn.InputChanged:Connect(function(Input)
+                if not MStart then return; end;
+                local T = Input.UserInputType;
+                if T ~= Enum.UserInputType.MouseMovement and T ~= Enum.UserInputType.Touch then return; end;
+                local Pos = Vector2.new(Input.Position.X, Input.Position.Y);
+                local Delta = Pos - MStart;
+                if Delta.Magnitude > 12 then MMoved = true; end;
+                if KeyPicker.Mode ~= 'Toggle' then return; end;
+                local VP = workspace.CurrentCamera.ViewportSize;
+                MobileBtn.Position = UDim2.new(
+                    0, math.clamp(MStartOffset.X + Delta.X, 22, math.max(22, VP.X - 22)),
+                    0, math.clamp(MStartOffset.Y + Delta.Y, 22, math.max(22, VP.Y - 22))
+                );
+            end);
+            MobileBtn.InputEnded:Connect(function(Input)
+                if Library:IsPrimaryInput(Input) then
+                    if KeyPicker.Mode == 'Hold' and MHoldActive then
+                        KeyPicker.Toggled = false;
+                        KeyPicker:Update();
+                        MHoldActive = false;
+                    elseif not MMoved and KeyPicker.Mode == 'Toggle' then
+                        KeyPicker.Toggled = not KeyPicker.Toggled;
+                        KeyPicker:DoClick();
+                        KeyPicker:Update();
+                    end;
+                    MStart = nil;
+                    MStartOffset = nil;
+                    MMoved = nil;
+                end;
+            end);
+        end;
+
         local ContainerLabel = Library:CreateLabel({
             TextXAlignment = Enum.TextXAlignment.Left;
             Size = UDim2.new(1, 0, 0, 18);
@@ -1415,21 +1535,21 @@ do
             end;
         end);
     end;
+        
     function KeyPicker:Update()
-        UpdateMobileButton();
-        if Info.NoUI then
-            return;
-        end;
-
+            if MobileBtn then
+                UpdateMobileButton();
+            end;
+            if Info.NoUI then
+                return;
+            end;
             local State = KeyPicker:GetState();
             ContainerLabel.Text = string.format('[%s] %s (%s)', KeyPicker.Value, Info.Text, KeyPicker.Mode);
-            ContainerLabel.Visible = true;
+            ContainerLabel.Visible = KeyPicker.Enabled;
             ContainerLabel.TextColor3 = State and Library.AccentColor or Library.FontColor;
             Library.RegistryMap[ContainerLabel].Properties.TextColor3 = State and 'AccentColor' or 'FontColor';
-
             local YSize = 0
             local XSize = 0
-
             for _, Label in next, Library.KeybindContainer:GetChildren() do
                 if Label:IsA('TextLabel') and Label.Visible then
                     YSize = YSize + 18;
@@ -1438,12 +1558,11 @@ do
                     end
                 end;
             end;
-
             Library.KeybindFrame.Size = UDim2.new(0, math.max(XSize + 10, 210), 0, YSize + 23)
         end;
 
-        function KeyPicker:GetState()
-        if not KeyPicker.Enabled then return false; end;
+         function KeyPicker:GetState()
+            if not KeyPicker.Enabled then return false; end;
             if KeyPicker.Mode == 'Always' then
                 return true;
             elseif KeyPicker.Mode == 'Hold' then
@@ -3704,18 +3823,22 @@ function Library:CreateWindow(...)
         Fading = false;
     end
 
-    Library:GiveSignal(InputService.InputBegan:Connect(function(Input, Processed)
+   Library:GiveSignal(InputService.InputBegan:Connect(function(Input, Processed)
         if Library.OpenBind and Input.KeyCode == Library.OpenBind then
             task.spawn(Library.Toggle)
-        elseif type(Library.ToggleKeybind) == 'table' and Library.ToggleKeybind.Type == 'KeyPicker' then
+            return;
+        end
+        if type(Library.ToggleKeybind) == 'table' and Library.ToggleKeybind.Type == 'KeyPicker' then
             if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode.Name == Library.ToggleKeybind.Value then
                 task.spawn(Library.Toggle)
+                return;
             end
-        elseif Input.KeyCode == Enum.KeyCode.RightControl or (Input.KeyCode == Enum.KeyCode.RightShift and (not Processed)) then
+        end
+        if Input.KeyCode == Enum.KeyCode.RightControl or (Input.KeyCode == Enum.KeyCode.RightShift and (not Processed)) then
             task.spawn(Library.Toggle)
         end
     end))
-
+    
     Library:CreateMobileToggleButton(Library.IsMobileButtonVisibleForPC);
 
     if Config.AutoShow then task.spawn(Library.Toggle) end
