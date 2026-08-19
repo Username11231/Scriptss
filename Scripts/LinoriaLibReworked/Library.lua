@@ -44,9 +44,6 @@ local Library = {
     ScreenGui = ScreenGui;
 };
 
--- ═══════════════════════════════════════════════════════════════
---  ЯДРО ОПТИМИЗАЦИИ: мобильный ввод, драг-система, скейл, тултип
--- ═══════════════════════════════════════════════════════════════
 do
     Library.IsMobile = InputService.TouchEnabled and not InputService.MouseEnabled;
     Library.Scale = 1;
@@ -136,7 +133,6 @@ do
         end;
     end));
 
-    -- ── Общий тултип: ОДИН инстанс на всю библиотеку ────────────
     local TooltipFrame, TooltipLabel, TooltipOwner;
     local TooltipShown = false;
     local TooltipCache, TooltipCacheN = {}, 0;
@@ -199,7 +195,6 @@ do
         end);
     end;
 
-    -- ── АВТО-СКЕЙЛ под экран ──────────────────────────────────────
     local ScaledFrames = {};
     local BaseMainSize, LastVP = nil, Vector2.zero;
 
@@ -291,7 +286,6 @@ do
         end;
     end;
 
-    -- ── МАСТЕР-ЛУП: единственный RenderStepped ───────────────────
     local RainbowAcc, RainbowHue, VPAcc = 0, 0, 0;
 
     table.insert(Library.Signals, RenderStepped:Connect(function(Delta)
@@ -317,7 +311,6 @@ do
         end;
     end));
 
-    -- ── Плавающая кнопка меню для телефона ────────────────────────
     function Library:CreateMobileToggleButton(ShowOnPC)
         if Library.MobileToggleButton then return; end;
         if not (Library.IsMobile or ShowOnPC) then return; end;
@@ -380,10 +373,6 @@ do
         Library.MobileToggleButton = Btn;
     end;
 end;
-
--- ═══════════════════════════════════════════════════════════════
---  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
--- ═══════════════════════════════════════════════════════════════
 
 local function GetPlayersString()
     local PlayerList = Players:GetPlayers();
@@ -668,10 +657,6 @@ Library:GiveSignal(ScreenGui.DescendantRemoving:Connect(function(Instance)
         end;
     end;
 end))
-
--- ═══════════════════════════════════════════════════════════════
---  BASE ADDONS (ColorPicker, KeyPicker)
--- ═══════════════════════════════════════════════════════════════
 
 local BaseAddons = {};
 
@@ -1135,7 +1120,6 @@ do
             ColorPicker:Display();
         end;
 
-        -- EVENT-DRIVEN: SatVibMap drag (mouse + touch)
         Library:AddDragHandler(SatVibMap, function(Pos)
             local MinX = SatVibMap.AbsolutePosition.X;
             local MaxX = MinX + SatVibMap.AbsoluteSize.X;
@@ -1150,7 +1134,6 @@ do
             Library:AttemptSave();
         end, true);
 
-        -- EVENT-DRIVEN: HueSelector drag
         Library:AddDragHandler(HueSelectorInner, function(Pos)
             local MinY = HueSelectorInner.AbsolutePosition.Y;
             local MaxY = MinY + HueSelectorInner.AbsoluteSize.Y;
@@ -1176,7 +1159,6 @@ do
             end
         end);
 
-        -- Touch support for DisplayFrame
         DisplayFrame.InputEnded:Connect(function(Input)
             if Input.UserInputType ~= Enum.UserInputType.Touch or Library:MouseIsOverOpenedFrame() then
                 return;
@@ -1534,10 +1516,6 @@ do
         return Funcs[Key](...);
     end;
 end;
-
--- ═══════════════════════════════════════════════════════════════
---  BASE GROUPBOX (Labels, Buttons, Inputs, Toggles, Sliders, Dropdowns)
--- ═══════════════════════════════════════════════════════════════
 
 local BaseGroupbox = {};
 
@@ -2238,7 +2216,6 @@ do
             Library:SafeCallback(Slider.Changed, Slider.Value);
         end;
 
-        -- EVENT-DRIVEN: Slider drag (mouse + touch)
         Library:AddDragHandler(SliderInner, function(Pos)
             local StartX = SliderInner.AbsolutePosition.X;
             local Size = SliderInner.AbsoluteSize.X;
@@ -2751,10 +2728,6 @@ do
     end;
 end;
 
--- ═══════════════════════════════════════════════════════════════
---  NOTIFICATION AREA, WATERMARK, KEYBINDS
--- ═══════════════════════════════════════════════════════════════
-
 do
     Library.NotificationArea = Library:Create('Frame', {
         BackgroundTransparency = 1;
@@ -2997,10 +2970,6 @@ function Library:Notify(Text, Time)
     end);
 end;
 
--- ═══════════════════════════════════════════════════════════════
---  CREATE WINDOW (с OpenBind и IsMobileButtonVisibleForPC)
--- ═══════════════════════════════════════════════════════════════
-
 function Library:CreateWindow(...)
     local Arguments = { ... }
     local Config = { AnchorPoint = Vector2.zero }
@@ -3021,14 +2990,12 @@ function Library:CreateWindow(...)
         Config.Position = UDim2.fromScale(0.5, 0.5)
     end
 
-    -- НОВОЕ: OpenBind — клавиша для открытия/закрытия меню
     if Config.OpenBind ~= nil then
         Library.OpenBind = Config.OpenBind;
     else
         Library.OpenBind = nil;
     end
 
-    -- НОВОЕ: IsMobileButtonVisibleForPC — показывать кнопку и на ПК
     if Config.IsMobileButtonVisibleForPC ~= nil then
         Library.IsMobileButtonVisibleForPC = Config.IsMobileButtonVisibleForPC;
     else
@@ -3637,7 +3604,6 @@ function Library:CreateWindow(...)
             if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode.Name == Library.ToggleKeybind.Value then
                 task.spawn(Library.Toggle)
             end
-        -- НОВОЕ: OpenBind поддержка
         elseif Library.OpenBind and Input.KeyCode == Library.OpenBind then
             task.spawn(Library.Toggle)
         elseif Input.KeyCode == Enum.KeyCode.RightControl or (Input.KeyCode == Enum.KeyCode.RightShift and (not Processed)) then
@@ -3645,7 +3611,6 @@ function Library:CreateWindow(...)
         end
     end))
 
-    -- НОВОЕ: Создание мобильной кнопки
     Library:CreateMobileToggleButton(Library.IsMobileButtonVisibleForPC);
 
     if Config.AutoShow then task.spawn(Library.Toggle) end
