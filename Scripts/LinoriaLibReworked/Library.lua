@@ -1,4 +1,4 @@
--- V8
+-- V9
 -- реворкнутая менюшка для телефонов и оптимизмированная by database :3
 local InputService = game:GetService('UserInputService');
 local TextService = game:GetService('TextService');
@@ -146,7 +146,6 @@ do
             if Library:MouseIsOverOpenedFrame() then return; end;
             EnsureTooltip();
             TooltipOwner = HoverInstance;
-
             local Size = TooltipCache[InfoStr];
             if not Size then
                 local X, Y = Library:GetTextBounds(InfoStr, Library.Font, 14);
@@ -156,7 +155,6 @@ do
                     TooltipCache[InfoStr] = Size;
                 end;
             end;
-
             TooltipLabel.Text = InfoStr;
             TooltipFrame.Size = UDim2.fromOffset(Size.X + 5, Size.Y + 4);
             TooltipFrame.Position = UDim2.fromOffset(Mouse.X + 15, Mouse.Y + 12);
@@ -211,7 +209,7 @@ do
     end;
     ScreenGui.ChildAdded:Connect(function(Child)
         if not Child:IsA('GuiObject') then return; end;
-       if Child.Name == '__Tooltip' or Child.Name == '__MobileToggle' or Child.Name == '__Modal' or string.match(Child.Name, '^__BindBtn_') then return; end;
+        if Child.Name == '__Tooltip' or Child.Name == '__MobileToggle' or Child.Name == '__Modal' or string.match(Child.Name, '^__BindBtn_') then return; end;
         if not Child:FindFirstChildOfClass('UIScale') then
             local S = Instance.new('UIScale');
             S.Name = '__Scale';
@@ -340,8 +338,8 @@ do
             return Key;
         end;
         local BtnCount = 0;
-        for _, _ in next, ScreenGui:GetChildren() do
-            if string.match(_.Name, '^__BindBtn_') then BtnCount += 1; end;
+        for _, Child in next, ScreenGui:GetChildren() do
+            if string.match(Child.Name, '^__BindBtn_') then BtnCount += 1; end;
         end;
         local VP0 = workspace.CurrentCamera.ViewportSize;
         local StartX = VP0.X * 0.85;
@@ -366,12 +364,14 @@ do
         Library:Create('UICorner', { CornerRadius = UDim.new(1, 0); Parent = Btn; });
         Library:AddToRegistry(Btn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; TextColor3 = 'FontColor'; });
         local MStart, MStartOffset, MMoved, MHoldActive;
+        local Dragging = false;
         Btn.InputBegan:Connect(function(Input)
             if not Library:IsPrimaryInput(Input) then return; end;
             local P = Input.Position;
             MStart = Vector2.new(P.X, P.Y);
             MStartOffset = Vector2.new(Btn.Position.X.Offset, Btn.Position.Y.Offset);
             MMoved = false;
+            Dragging = true;
             if KeyPicker.Mode == 'Hold' then
                 MHoldActive = true;
                 KeyPicker.Toggled = true;
@@ -380,7 +380,7 @@ do
             end;
         end);
         Btn.InputChanged:Connect(function(Input)
-            if not MStart then return; end;
+            if not Dragging or not MStart then return; end;
             local T = Input.UserInputType;
             if T ~= Enum.UserInputType.MouseMovement and T ~= Enum.UserInputType.Touch then return; end;
             local Pos = Vector2.new(Input.Position.X, Input.Position.Y);
@@ -394,7 +394,8 @@ do
             );
         end);
         Btn.InputEnded:Connect(function(Input)
-            if Library:IsPrimaryInput(Input) then
+            if Library:IsPrimaryInput(Input) and Dragging then
+                Dragging = false;
                 if KeyPicker.Mode == 'Hold' and MHoldActive then
                     KeyPicker.Toggled = false;
                     KeyPicker:Update();
@@ -412,46 +413,6 @@ do
         Library.MobileBindButtons[Idx] = Btn;
         return Btn;
     end;
-    function Library:CreateMobileBindButton(KeyPicker, Idx)
-if not (Library.ShowBindsButtonForPC or Library.IsMobile) then return nil; end;
-local function GetKeyDisplayText()
-local Key = KeyPicker.Value;
-if Key == 'MB1' then return 'LMB'; end;
-if Key == 'MB2' then return 'RMB'; end;
-if Key == 'MB3' then return 'MMB'; end;
-if Key == 'None' or Key == '' then return '-'; end;
-return Key;
-end;
-local BtnCount = 0;
-for _, Child in next, ScreenGui:GetChildren() do
-if string.match(Child.Name, '^__BindBtn_') then BtnCount += 1; end;
-end;
-local VP0 = workspace.CurrentCamera.ViewportSize;
-local StartX = VP0.X * 0.85;
-local StartY = VP0.Y * (0.15 + BtnCount * 0.08);
-local Btn = Library:Create('TextButton', {
-Name = '__BindBtn_' .. Idx;
-BackgroundColor3 = Library.MainColor;
-BorderColor3 = Library.OutlineColor;
-AnchorPoint = Vector2.new(0.5, 0.5);
-Position = UDim2.new(0, StartX, 0, StartY);
-Size = UDim2.fromOffset(36, 36);
-ZIndex = 290;
-Text = GetKeyDisplayText();
-Font = Library.Font;
-TextSize = 14;
-TextColor3 = Library.FontColor;
-BackgroundTransparency = 0;
-AutoButtonColor = false;
-Parent = ScreenGui;
-});
-Btn.Active = true;
-Library:Create('UICorner', { CornerRadius = UDim.new(1, 0); Parent = Btn; });
-Library:AddToRegistry(Btn, { BackgroundColor3 = 'MainColor'; BorderColor3 = 'OutlineColor'; TextColor3 = 'FontColor'; });
-Library.MobileBindButtons = Library.MobileBindButtons or {};
-Library.MobileBindButtons[Idx] = Btn;
-return Btn;
-end;
 end;
 local function GetPlayersString()
     local PlayerList = Players:GetPlayers();
@@ -1177,7 +1138,7 @@ do
         Options[Idx] = ColorPicker;
         return self;
     end;
-        function Funcs:AddKeyPicker(Idx, Info)
+    function Funcs:AddKeyPicker(Idx, Info)
         local ParentObj = self;
         local ToggleLabel = self.TextLabel;
         local Container = self.Container;
@@ -1492,12 +1453,12 @@ do
         end))
         KeyPicker:Update();
         Options[Idx] = KeyPicker;
-return self;
-end;
-BaseAddons.__index = Funcs;
-BaseAddons.__namecall = function(Table, Key, ...)
-return Funcs[Key](...);
-end;
+        return self;
+    end;
+    BaseAddons.__index = Funcs;
+    BaseAddons.__namecall = function(Table, Key, ...)
+        return Funcs[Key](...);
+    end;
 end;
 local BaseGroupbox = {};
 do
@@ -2792,16 +2753,15 @@ function Library:CreateWindow(...)
         Library.OpenBind = nil;
     end
     if Config.IsMobileButtonVisibleForPC ~= nil then
-    Library.IsMobileButtonVisibleForPC = Config.IsMobileButtonVisibleForPC;
+        Library.IsMobileButtonVisibleForPC = Config.IsMobileButtonVisibleForPC;
     else
-    Library.IsMobileButtonVisibleForPC = false;
+        Library.IsMobileButtonVisibleForPC = false;
     end
     if Config.ShowBindsButtonForPC ~= nil then
-    Library.ShowBindsButtonForPC = Config.ShowBindsButtonForPC;
+        Library.ShowBindsButtonForPC = Config.ShowBindsButtonForPC;
     else
-    Library.ShowBindsButtonForPC = false;
+        Library.ShowBindsButtonForPC = false;
     end
-    
     local Window = {
         Tabs = {};
     };
