@@ -1,4 +1,7 @@
--- ===== Services =====
+--[[
+    Fluent UI Library (based on Driblixx HUB style)
+--]]
+
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players          = game:GetService("Players")
@@ -9,7 +12,9 @@ local Debris           = game:GetService("Debris")
 local LocalPlayer      = Players.LocalPlayer
 local PlayerGui        = LocalPlayer:WaitForChild("PlayerGui")
 
--- ===== Constants =====
+local FONT       = Enum.Font.GothamMedium
+local FONT_BOLD  = Enum.Font.GothamBold
+
 local THEME = {
     Dark = {
         Background = Color3.fromRGB(24, 24, 28),
@@ -24,10 +29,7 @@ local THEME = {
     }
 }
 
-local FONT = Enum.Font.GothamMedium
-local FONT_BOLD = Enum.Font.GothamBold
-
--- ===== Utility Functions =====
+-- ===== Утилиты =====
 local function tween(obj, info, props)
     local t = TweenService:Create(obj, info, props)
     t:Play()
@@ -50,26 +52,26 @@ local function create(class, props, children)
 end
 
 local function corner(r)
-    local inst = Instance.new("UICorner")
-    inst.CornerRadius = UDim.new(0, r or 8)
-    return inst
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 8)
+    return c
 end
 
 local function stroke(col, thick, transp)
-    local inst = Instance.new("UIStroke")
-    inst.Color = col or Color3.fromRGB(58, 58, 68)
-    inst.Thickness = thick or 1
-    inst.Transparency = transp or 0
-    return inst
+    local s = Instance.new("UIStroke")
+    s.Color = col or THEME.Dark.Stroke
+    s.Thickness = thick or 1
+    s.Transparency = transp or 0
+    return s
 end
 
 local function padding(a)
-    local inst = Instance.new("UIPadding")
-    inst.PaddingTop = UDim.new(0, a)
-    inst.PaddingBottom = UDim.new(0, a)
-    inst.PaddingLeft = UDim.new(0, a)
-    inst.PaddingRight = UDim.new(0, a)
-    return inst
+    local p = Instance.new("UIPadding")
+    p.PaddingTop = UDim.new(0, a)
+    p.PaddingBottom = UDim.new(0, a)
+    p.PaddingLeft = UDim.new(0, a)
+    p.PaddingRight = UDim.new(0, a)
+    return p
 end
 
 local function darken(col, factor)
@@ -119,7 +121,7 @@ local function spawnRipple(button, relX, relY, color, fillDuration, rippleZIndex
     end)
 end
 
--- ===== Fluent Library =====
+-- ===== Библиотека Fluent =====
 local Fluent = {}
 Fluent.Options = {}
 Fluent._refreshers = {}
@@ -196,9 +198,9 @@ function Fluent:Init()
 end
 
 function Fluent:CreateKeySystem(config)
-    -- Optional key system, not required
+    -- Необязательная система ключей (по умолчанию отключена)
     if not config.Enabled then return true end
-    -- implement if needed
+    -- Реализация при необходимости
     return true
 end
 
@@ -367,6 +369,8 @@ function Fluent:CreateWindow(config)
     local acrylic = config.Acrylic or false
     local theme = config.Theme or "Dark"
     local minimizeKey = config.MinimizeKey or Enum.KeyCode.RightAlt
+    local backgroundImage = config.BackgroundImage
+    local backgroundImageTransparency = config.BackgroundImageTransparency or 0.75
 
     local window = {}
     window.Tabs = {}
@@ -385,19 +389,18 @@ function Fluent:CreateWindow(config)
     }, { corner(12), stroke(THEME.Dark.Stroke, 1) })
     self._mainFrame = Main
 
-    -- Acrylic blur
-    if acrylic then
-        local blur = create("Frame", {
-            Name = "BlurBackground",
+    -- Фоновое изображение (опционально)
+    if backgroundImage then
+        create("ImageLabel", {
+            Name = "CustomBackground",
+            Image = backgroundImage,
             BackgroundTransparency = 1,
+            ImageTransparency = backgroundImageTransparency,
+            ScaleType = Enum.ScaleType.Crop,
             Size = UDim2.new(1, 0, 1, 0),
-            Parent = Main,
-            ZIndex = 0
-        }, { create("UIGradient", {
-            Color = ColorSequence.new(Color3.new(0, 0, 0), Color3.new(0, 0, 0)),
-            Transparency = NumberSequence.new(0.5, 0.7)
-        }) })
-        -- actual blur not available directly, but we can fake with semi-transparent
+            ZIndex = 0,
+            Parent = Main
+        }, { corner(12) })
     end
 
     local FadeCover = create("Frame", {
@@ -417,12 +420,22 @@ function Fluent:CreateWindow(config)
         Size = UDim2.new(1, 0, 0, TOPBAR_H),
         Parent = Main
     })
-    local topBarMasks = {}
-    local maskTL = create("Frame", { BackgroundColor3 = TopBar.BackgroundColor3, Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(0, 0, 0, 0), ZIndex = TopBar.ZIndex + 1, Parent = TopBar })
-    local maskTR = create("Frame", { BackgroundColor3 = TopBar.BackgroundColor3, Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(1, -12, 0, 0), ZIndex = TopBar.ZIndex + 1, Parent = TopBar })
-    topBarMasks.MaskTL = maskTL
-    topBarMasks.MaskTR = maskTR
     corner(12).Parent = TopBar
+    -- Маски для верхних углов (чтобы не закруглялись нижние)
+    local maskTL = create("Frame", {
+        BackgroundColor3 = TopBar.BackgroundColor3,
+        Size = UDim2.new(0, 12, 0, 12),
+        Position = UDim2.new(0, 0, 0, 0),
+        ZIndex = TopBar.ZIndex + 1,
+        Parent = TopBar
+    })
+    local maskTR = create("Frame", {
+        BackgroundColor3 = TopBar.BackgroundColor3,
+        Size = UDim2.new(0, 12, 0, 12),
+        Position = UDim2.new(1, -12, 0, 0),
+        ZIndex = TopBar.ZIndex + 1,
+        Parent = TopBar
+    })
 
     local TitleLabel = create("TextLabel", {
         Text = title,
@@ -505,8 +518,6 @@ function Fluent:CreateWindow(config)
         CloseBtn.Visible = true
     end
     local function setMinVisual(isMin)
-        if topBarMasks.MaskBL then topBarMasks.MaskBL.Visible = not isMin end
-        if topBarMasks.MaskBR then topBarMasks.MaskBR.Visible = not isMin end
         MinBtn.Text = isMin and "▲" or "—"
         if isMin then hideCtrlBtns() else showCtrlBtns() end
     end
@@ -654,12 +665,23 @@ function Fluent:CreateWindow(config)
         Position = UDim2.new(0, 0, 0, TOPBAR_H),
         Size = UDim2.new(0, tabWidth, 1, -TOPBAR_H),
         Parent = Main
-    }, { corner(12) })
-    -- Masks for bottom corners
-    local maskBL = create("Frame", { BackgroundColor3 = TabListShell.BackgroundColor3, Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(0, 0, 1, -12), ZIndex = TabListShell.ZIndex + 1, Parent = TabListShell })
-    local maskBR = create("Frame", { BackgroundColor3 = TabListShell.BackgroundColor3, Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(1, -12, 1, -12), ZIndex = TabListShell.ZIndex + 1, Parent = TabListShell })
-    topBarMasks.MaskBL = maskBL
-    topBarMasks.MaskBR = maskBR
+    })
+    corner(12).Parent = TabListShell
+    -- Маски для нижних углов
+    local maskBL = create("Frame", {
+        BackgroundColor3 = TabListShell.BackgroundColor3,
+        Size = UDim2.new(0, 12, 0, 12),
+        Position = UDim2.new(0, 0, 1, -12),
+        ZIndex = TabListShell.ZIndex + 1,
+        Parent = TabListShell
+    })
+    local maskBR = create("Frame", {
+        BackgroundColor3 = TabListShell.BackgroundColor3,
+        Size = UDim2.new(0, 12, 0, 12),
+        Position = UDim2.new(1, -12, 1, -12),
+        ZIndex = TabListShell.ZIndex + 1,
+        Parent = TabListShell
+    })
 
     local TabList = create("Frame", {
         BackgroundTransparency = 1,
@@ -791,19 +813,19 @@ function Fluent:CreateWindow(config)
         table.insert(window.Tabs, Tab)
         if #window.Tabs == 1 then selectTab() end
 
-        -- ===== Tab API methods =====
+        -- Методы элементов
         function Tab:AddToggle(flag, config)
             config = config or {}
             local state = config.Default or false
             local Title = config.Title or "Toggle"
             local ToggleObj = { Value = state, Flag = flag }
 
-            -- Create UI
             local H = create("Frame", {
                 BackgroundColor3 = THEME.Dark.Secondary,
                 Size = UDim2.new(1, 0, 0, 30),
                 Parent = Page
-            }, { corner(8), stroke(THEME.Dark.Stroke, 1) })
+            }, { corner(8), stroke(THEME.Dark.Stroke, 1), padding(8) })
+
             local NameLabel = create("TextLabel", {
                 Text = Title,
                 Font = FONT,
@@ -846,8 +868,6 @@ function Fluent:CreateWindow(config)
             end
             function ToggleObj:OnChanged(handler)
                 table.insert(handlers, handler)
-                -- Call immediately with initial state? Usually no, but we can.
-                -- handler(state)
                 return ToggleObj
             end
 
@@ -855,10 +875,8 @@ function Fluent:CreateWindow(config)
                 ToggleObj:Set(not state)
             end)
 
-            -- Register in Options
             Fluent.Options[flag] = { Value = state }
 
-            -- Refresher for theme updates
             table.insert(Fluent._refreshers, function()
                 if not H.Parent then return false end
                 NameLabel.TextColor3 = THEME.Dark.Text
@@ -883,7 +901,8 @@ function Fluent:CreateWindow(config)
                 BackgroundColor3 = THEME.Dark.Secondary,
                 Size = UDim2.new(1, 0, 0, 52),
                 Parent = Page
-            }, { corner(8), stroke(THEME.Dark.Stroke, 1) })
+            }, { corner(8), stroke(THEME.Dark.Stroke, 1), padding(8) })
+
             local NameLabel = create("TextLabel", {
                 Text = Title,
                 Font = FONT,
@@ -918,7 +937,6 @@ function Fluent:CreateWindow(config)
             Input.FocusLost:Connect(function(enter)
                 quickTween(Box, { BackgroundColor3 = THEME.Dark.Tertiary }, 0.15)
                 if Finished then
-                    -- only update on focus lost
                     local val = Input.Text
                     if Numeric then
                         local num = tonumber(val)
@@ -966,6 +984,7 @@ function Fluent:CreateWindow(config)
                 AutomaticSize = Enum.AutomaticSize.Y,
                 Parent = Page
             }, { corner(8), stroke(THEME.Dark.Stroke, 1), padding(12) })
+
             local TitleLabel = create("TextLabel", {
                 Text = Title,
                 Font = FONT_BOLD,
@@ -1002,6 +1021,7 @@ function Fluent:CreateWindow(config)
                 Size = UDim2.new(1, 0, 0, Description ~= "" and 48 or 30),
                 Parent = Page
             }, { corner(8), stroke(THEME.Dark.Stroke, 1), padding(8) })
+
             local Btn = create("TextButton", {
                 Text = "",
                 BackgroundColor3 = THEME.Dark.Tertiary,
@@ -1226,13 +1246,23 @@ function Fluent:CreateWindow(config)
 
             if Multi then
                 if type(Default) ~= "table" then Default = {} end
+                -- Default = { "value1", "value2" } или { value = true }
+                local newDefault = {}
+                if Default[1] then
+                    -- массив
+                    for _, v in ipairs(Default) do newDefault[v] = true end
+                else
+                    -- словарь
+                    for k, v in pairs(Default) do if v then newDefault[k] = true end end
+                end
+                Default = newDefault
             else
                 if type(Default) ~= "number" then Default = 1 end
             end
 
             local DropdownObj = {}
             if Multi then
-                DropdownObj.Value = {}  -- will be a dictionary: {value = true}
+                DropdownObj.Value = {}
             else
                 DropdownObj.Value = Values[Default] or (Values[1] or "")
             end
@@ -1305,8 +1335,8 @@ function Fluent:CreateWindow(config)
 
             local selectedSet = {}
             if Multi then
-                for _, v in ipairs(Default) do
-                    selectedSet[v] = true
+                for k, v in pairs(Default) do
+                    selectedSet[k] = v
                 end
                 DropdownObj.Value = selectedSet
             end
@@ -1517,7 +1547,6 @@ function Fluent:CreateWindow(config)
                 end)
             end
         else
-            -- default close button
             local closeBtn = create("TextButton", {
                 Text = "OK",
                 Font = FONT,
@@ -1539,7 +1568,7 @@ function Fluent:CreateWindow(config)
         quickTween(Card, { BackgroundTransparency = 0 }, 0.25)
     end
 
-    -- Initial animation
+    -- Анимация появления
     Main.Size = UDim2.new(size.X.Scale, size.X.Offset * 0.4, size.Y.Scale, size.Y.Offset * 0.4)
     Main.BackgroundTransparency = 1
     tween(Main, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -1550,7 +1579,7 @@ function Fluent:CreateWindow(config)
     return window
 end
 
--- Initialize
+-- Инициализация
 Fluent:Init()
 
 return Fluent
